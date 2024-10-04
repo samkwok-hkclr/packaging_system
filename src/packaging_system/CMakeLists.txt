@@ -14,8 +14,6 @@ cogen_dcf(17w_lifecycle)
 
 install(DIRECTORY
   launch 
-  # rviz 
-  # urdf 
   launch_tests
   DESTINATION share/${PROJECT_NAME}
 )

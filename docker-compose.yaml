@@ -47,9 +47,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 4096M
-        reservations:
-          cpus: '0.2'
-          memory: 1024M
+
 
 networks:
   packaging_network:
