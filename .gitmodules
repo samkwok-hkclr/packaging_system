@@ -2,3 +2,8 @@
 	path = src/ros2_canopen
 	url = https://github.com/ros-industrial/ros2_canopen
 	branch = humble
+
+[submodule "src/packaging_system/config/17w_lifecycle/packaging_machine.eds"]
+	path = src/packaging_system/config/17w_lifecycle/packaging_machine.eds
+	url = https://github.com/samkwok-hkclr/packaging_machine/blob/master/CANopenNode_STM32/packaging_machine.eds
+	branch = master

@@ -8,8 +8,8 @@ Description=The Object Dictionary of Packaging Machine
 CreationTime=3:00PM
 CreationDate=09-17-2024
 CreatedBy=Sam Kwok
-ModificationTime=5:19PM
-ModificationDate=10-03-2024
+ModificationTime=2:37PM
+ModificationDate=10-04-2024
 ModifiedBy=Sam Kwok
 
 [DeviceInfo]
@@ -888,7 +888,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0005
 AccessType=rw
-DefaultValue=4
+DefaultValue=5
 PDOMapping=0
 
 [1600sub1]
@@ -933,7 +933,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=rw
-DefaultValue=0x00000000
+DefaultValue=0x60030008
 PDOMapping=0
 
 [1600sub6]
@@ -1850,11 +1850,11 @@ ParameterName=Disable Heater
 ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0005
-AccessType=rw
+AccessType=rww
 HighLimit=1
 LowLimit=0
 DefaultValue=0
-PDOMapping=0
+PDOMapping=1
 
 [6004]
 ParameterName=Kp
