@@ -3,6 +3,7 @@
 ## Prerequisites
 
 * A host PC with Docker and Git installed.
+* SocketCAN
 
 ## Installation
 
