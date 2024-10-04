@@ -18,7 +18,7 @@ git clone https://github.com/samkwok-hkclr/packaging_system
 docker build --tag packaging_system:v0 --target=dev_img --progress=plain .
 ```
 
-### 4. Run the Docker Container
+### 3. Run the Docker Container
 
 ```bash
 docker compose up -d
