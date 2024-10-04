@@ -9,13 +9,13 @@
 ### 1. Clone the Repository
 
 ```bash
-cd packaging_system
 git clone --recurse-submodules -j8 https://github.com/samkwok-hkclr/packaging_system
 ```
 
 ### 2. Build the Docker images
 
 ```bash
+cd packaging_system
 docker build --tag packaging_system:v0 --target=dev_img --progress=plain .
 ```
 
