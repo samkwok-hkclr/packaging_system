@@ -1,1 +1,3 @@
 docker build --tag packaging_system:v0 --target=dev_img --progress=plain .
+
+docker compose up -d

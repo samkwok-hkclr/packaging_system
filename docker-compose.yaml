@@ -14,14 +14,9 @@ services:
     volumes:
       - ./logs:/logs
     restart: unless-stopped
-    # healthcheck:
-    #   test: "curl -f http://127.0.0.1:18000/api/healthy || exit 1"
-    #   interval: 30s
-    #   timeout: 3s
-    #   retries: 5
-    # networks:
-    #   plc_network:
-    #     ipv4_address: 10.8.104.2
+    networks:
+      packaging_network:
+        ipv4_address: 10.8.104.2
     deploy:
       resources:
         limits:
@@ -31,9 +26,9 @@ services:
           cpus: '0.2'
           memory: 1024M
 
-# networks:
-#   plc_network:
-#     ipam:
-#       driver: default
-#       config:
-#         - subnet: 10.8.104.0/24
+networks:
+  packaging_network:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.8.104.0/24
