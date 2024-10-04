@@ -15,7 +15,7 @@ git clone https://github.com/samkwok-hkclr/packaging_system
 ### 2. Build the Docker images
 
 ```bash
-docker build --tag packaging_system:v0 --target=plc_img --progress=plain .
+docker build --tag packaging_system:v0 --target=dev_img --progress=plain .
 ```
 
 ### 4. Run the Docker Container
