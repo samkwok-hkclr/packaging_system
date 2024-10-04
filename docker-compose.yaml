@@ -5,18 +5,43 @@ services:
     image: packaging_system:v0
     container_name: packaging_system
     hostname: packaging_system
-    command: ros2 launch packaging_system 17w_lifecycle_setup.launch.py
+    command: "ros2 launch packaging_system 17w_lifecycle_setup.launch.py && ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
     # security_opt: 
     #   - no-new-privileges:true
     ports:
       - "8000:8000/tcp"
-      - "9090:9090/tcp"
     volumes:
       - ./logs:/logs
     restart: unless-stopped
     networks:
       packaging_network:
         ipv4_address: 10.8.104.2
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 4096M
+        reservations:
+          cpus: '0.2'
+          memory: 1024M
+
+  packaging_bridge:
+    image: packaging_system:v0
+    container_name: packaging_bridge
+    hostname: packaging_bridge
+    depends_on:
+      - packaging_system
+    command: "ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
+    # security_opt: 
+    #   - no-new-privileges:true
+    ports:
+      - "9090:9090/tcp"
+    volumes:
+      - ./logs:/logs
+    restart: unless-stopped
+    networks:
+      packaging_network:
+        ipv4_address: 10.8.104.3
     deploy:
       resources:
         limits:

@@ -5,7 +5,11 @@
 PHY_CAN_INTERFACE=can0
 VIR_CAN_TUNNEL_0=vxcan0
 VIR_CAN_TUNNEL_1=vxcan1
+
 CONTAINER_NAME=packaging_system
+WS_NAME=packaging_system
+
+ROS_DISTRO=humble
 
 DOCKERPID=$(docker inspect -f '{{ .State.Pid }}' $CONTAINER_NAME) 
 sudo ip link add $VIR_CAN_TUNNEL_0 type vxcan peer name $VIR_CAN_TUNNEL_1 netns $DOCKERPID 
@@ -16,7 +20,7 @@ sudo ip link set $VIR_CAN_TUNNEL_0 up
 sudo nsenter -t $DOCKERPID -n ip link set $VIR_CAN_TUNNEL_1 up
 
 docker exec $CONTAINER_NAME /bin/bash -c "\
-    source /opt/ros/humble/setup.bash; \
-    source /packaging_system/install/setup.bash; \
+    source /opt/ros/$ROS_DISTRO/setup.bash; \
+    source /$WS_NAME/install/setup.bash; \
     ros2 lifecycle set /lifecycle_manager configure; \
     ros2 lifecycle set /lifecycle_manager activate"

@@ -28,7 +28,7 @@ RUN apt install -y build-essential cmake git wget dos2unix \
     ros-${ROS_DISTRO}-diagnostic-updater \
     ros-${ROS_DISTRO}-controller-manager
     
-EXPOSE 8080 9090
+EXPOSE 8000 9090
 
 ENV WS_NAME=packaging_system
 RUN mkdir -p /${WS_NAME}/src
