@@ -1,0 +1,1 @@
+docker build --tag packaging_system:v0 --target=dev_img --progress=plain .

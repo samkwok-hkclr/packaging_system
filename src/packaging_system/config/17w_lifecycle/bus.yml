@@ -3,7 +3,7 @@ options:
 
 master:
   node_id: 127
-  driver: "ros2_canopen::MasterDriver"
+  driver: "ros2_canopen::LifecycleMasterDriver"
   package: "canopen_master_driver"
   baud_rate: 500
   heartbeat_consumer: true
@@ -22,7 +22,7 @@ nodes:
     revision_number: 0
     polling: true
     dcf: "packaging_machine.eds"
-    driver: "ros2_canopen::ProxyDriver"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
     package: "canopen_proxy_driver"
     period: 100
     enable_lazy_load: true
