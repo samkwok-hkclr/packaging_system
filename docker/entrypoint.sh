@@ -1,4 +1,4 @@
-#!/bin/bash 
+#! /bin/bash 
 # Basic entrypoint Docker containers
 
 # Source ROS 2

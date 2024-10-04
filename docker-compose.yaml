@@ -1,0 +1,39 @@
+version: '3.7'
+  
+services:
+  packaging_system:
+    image: packaging_system:v0
+    container_name: packaging_system
+    hostname: packaging_system
+    command: ros2 launch packaging_system 17w_lifecycle_setup.launch.py
+    # security_opt: 
+    #   - no-new-privileges:true
+    ports:
+      - "8000:8000/tcp"
+      - "9090:9090/tcp"
+    volumes:
+      - ./logs:/logs
+    restart: unless-stopped
+    # healthcheck:
+    #   test: "curl -f http://127.0.0.1:18000/api/healthy || exit 1"
+    #   interval: 30s
+    #   timeout: 3s
+    #   retries: 5
+    # networks:
+    #   plc_network:
+    #     ipv4_address: 10.8.104.2
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 4096M
+        reservations:
+          cpus: '0.2'
+          memory: 1024M
+
+# networks:
+#   plc_network:
+#     ipam:
+#       driver: default
+#       config:
+#         - subnet: 10.8.104.0/24

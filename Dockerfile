@@ -28,19 +28,24 @@ RUN apt install -y build-essential cmake git wget dos2unix \
     ros-${ROS_DISTRO}-diagnostic-updater \
     ros-${ROS_DISTRO}-controller-manager
     
-EXPOSE 8080, 9090
+EXPOSE 8080 9090
 
 ENV WS_NAME=packaging_system
-RUN mkdir -p /packaging_system/src
-WORKDIR /packaging_system
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh
-RUN rosdep install --from-paths src/ros2_canopen --ignore-src -r -y
-RUN colcon build
+RUN mkdir -p /${WS_NAME}/src
+
+WORKDIR /${WS_NAME}
+
+COPY ./src ./src
+
+RUN rosdep init
+RUN rosdep update
+RUN rosdep install --from-paths /${WS_NAME}/src/ros2_canopen --ignore-src -r -y
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && colcon build
 
 RUN mkdir -p /logs
 ENV ROS_LOG_DIR=/logs
 VOLUME [ "/logs" ]
 
-COPY ./docker/entrypoint.sh /
+COPY --chmod=755 ./docker/entrypoint.sh /
 RUN dos2unix /entrypoint.sh 
 ENTRYPOINT [ "/entrypoint.sh" ]
