@@ -9,6 +9,7 @@
 ### 1. Clone the Repository
 
 ```bash
+cd packaging_system
 git clone --recurse-submodules -j8 https://github.com/samkwok-hkclr/packaging_system
 ```
 
