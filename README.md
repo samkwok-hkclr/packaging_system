@@ -9,7 +9,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/samkwok-hkclr/packaging_system
+git clone --recurse-submodules -j8 https://github.com/samkwok-hkclr/packaging_system
 ```
 
 ### 2. Build the Docker images
