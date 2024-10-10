@@ -19,11 +19,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.2'
-          memory: 2048M
-        # reservations:
-        #   cpus: '0.05'
-        #   memory: 512M
+          cpus: '0.5'
+          memory: 4096M
 
   packaging_bridge:
     image: packaging_system:v0
