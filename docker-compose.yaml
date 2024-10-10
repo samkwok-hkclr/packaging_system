@@ -5,7 +5,7 @@ services:
     image: packaging_system:v0
     container_name: packaging_system
     hostname: packaging_system
-    command: "ros2 launch packaging_system 17w_lifecycle_setup.launch.py && ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
+    command: "ros2 launch packaging_system 17w_lifecycle_setup.launch.py"
     # security_opt: 
     #   - no-new-privileges:true
     ports:
@@ -19,11 +19,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 4096M
-        reservations:
           cpus: '0.2'
-          memory: 1024M
+          memory: 2048M
+        # reservations:
+        #   cpus: '0.05'
+        #   memory: 512M
 
   packaging_bridge:
     image: packaging_system:v0

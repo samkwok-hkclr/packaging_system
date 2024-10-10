@@ -9,7 +9,6 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(lely_core_libraries REQUIRED)
 
-cogen_dcf(17w)
 cogen_dcf(17w_lifecycle)
 
 install(DIRECTORY

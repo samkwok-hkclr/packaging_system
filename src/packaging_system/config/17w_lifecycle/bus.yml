@@ -8,7 +8,7 @@ master:
   baud_rate: 500
   heartbeat_consumer: true
   heartbeat_producer: 1000
-  sync_period: 100000 # 100ms
+  # sync_period: 100000 # 100ms
 
 defaults:
   heartbeat_consumer: true
@@ -17,67 +17,105 @@ defaults:
 nodes:
   packaging_machine_1:
     node_id: 32
-    vendor_id: 0x1234
-    product_code: 0x1234
+    vendor_id: 0
+    product_code: 0
     revision_number: 0
-    polling: true
+    # polling: true
     dcf: "packaging_machine.eds"
     driver: "ros2_canopen::LifecycleProxyDriver" 
     package: "canopen_proxy_driver"
-    period: 100
-    enable_lazy_load: true
-    # sdo:
-    #   - {index: 0x6040, sub_index: 0, value: 0x86} # Controlword, clear error
-    #   - {index: 0x6040, sub_index: 0, value: 0x6} # Controlword, clear error
-    #   - {index: 0x607A, sub_index: 0, value: 0x0} # Target position
-    #   - {index: 0x6081, sub_index: 0, value: 0x0} # Profile velocity
-    #   - {index: 0x60FF, sub_index: 0, value: 0x0} # Target velocity
-    #   - {index: 0x60C2, sub_index: 1, value: 50} # Set interpolation time for cyclic modes to 50 ms
-    #   - {index: 0x60C2, sub_index: 2, value: -3} # Set base 10-3s
+    # period: 100
+    # enable_lazy_load: true
     # tpdo:
     #   1:
     #     enabled: true
     #     cob_id: "auto"
-    #     transmission: 0x1
+    #     transmission: 0xfe
+    #     event_timer: 0xc8
     #     mapping:
-    #       - {index: 0x6040, sub_index: 0} # Controlword 
-    #       - {index: 0x6060, sub_index: 0} # Operation Mode
-    #       - {index: 0x6041, sub_index: 0} # Statusword 
-    #       - {index: 0x6078, sub_index: 0} # Actual Current
+    #       - {index: 0x6001, sub_index: 0} # Temperature
+    #       - {index: 0x6002, sub_index: 0} # Temperature ADC Value
     #   2:
     #     enabled: true
     #     cob_id: "auto"
-    #     transmission: 0x1
+    #     transmission: 0xfe
+    #     event_timer: 0xc8
     #     mapping:
-    #       - {index: 0x6063, sub_index: 0} # Actual Position
-    #       - {index: 0x606C, sub_index: 0} # Actual Rotate Speed
+    #       - {index: 0x6054, sub_index: 0} # 
+    #       - {index: 0x6055, sub_index: 0} # 
+    #       - {index: 0x6056, sub_index: 0} # 
+    #       - {index: 0x6057, sub_index: 0} # 
+    #       - {index: 0x6018, sub_index: 0} # 
+    #       - {index: 0x6028, sub_index: 0} # 
+    #       - {index: 0x6038, sub_index: 0} # 
+    #       - {index: 0x6048, sub_index: 0} # 
     #   3:
     #     enabled: true
     #     cob_id: "auto"
-    #     transmission: 0x1
+    #     transmission: 0xfe
+    #     event_timer: 0xc8
     #     mapping:
-    #     - {index: 0x2680, sub_index: 0} # Warning word
-    #     # - {index: 0x6410, sub_index: 19} # Motor Temperature # Error!!!
+    #     - {index: 0x6060, sub_index: 0} # 
+    #     - {index: 0x6061, sub_index: 0} # 
+    #     - {index: 0x6062, sub_index: 0} # 
+    #     - {index: 0x6063, sub_index: 0} # 
+    #     - {index: 0x6064, sub_index: 0} # 
+    #     - {index: 0x6065, sub_index: 0} # 
+    #     - {index: 0x6066, sub_index: 0} # 
+    #     - {index: 0x6067, sub_index: 0} # 
+    #   4:
+    #     enabled: true
+    #     cob_id: "auto"
+    #     transmission: 0xfe
+    #     event_timer: 0xc8
+    #     mapping:
+    #     - {index: 0x6014, sub_index: 0} # 
+    #     - {index: 0x6024, sub_index: 0} # 
+    #     - {index: 0x6033, sub_index: 0} # 
+    #     - {index: 0x6043, sub_index: 0} # 
     # rpdo:
     #   1:
     #     enabled: true
     #     cob_id: "auto"
     #     mapping:
-    #     - {index: 0x6040, sub_index: 0} # Controlword
-    #     - {index: 0x6060, sub_index: 0} # Operation Mode
-    #     - {index: 0x60FF, sub_index: 0} # Target velocity
+    #     - {index: 0x6011, sub_index: 0} # 
+    #     - {index: 0x6012, sub_index: 0} # 
+    #     - {index: 0x6013, sub_index: 0} # 
+    #     - {index: 0x6019, sub_index: 0} # 
+    #     - {index: 0x6003, sub_index: 0} # 
     #   2:
     #     enabled: true
     #     cob_id: "auto"
     #     mapping:
-    #     - {index: 0x607A, sub_index: 0} # Target position
-    #     - {index: 0x6081, sub_index: 0} # Profile velocity
+    #     - {index: 0x6021, sub_index: 0} # 
+    #     - {index: 0x6022, sub_index: 0} # 
+    #     - {index: 0x6023, sub_index: 0} # 
+    #     - {index: 0x6027, sub_index: 0} # 
+    #     - {index: 0x6029, sub_index: 0} # 
     #   3:
     #     enabled: true
     #     cob_id: "auto"
     #     mapping:
-    #     - {index: 0x6083, sub_index: 0} # Profile acc
-    #     - {index: 0x6084, sub_index: 0} # Profile dec
+    #     - {index: 0x6030, sub_index: 0} # 
+    #     - {index: 0x6031, sub_index: 0} # 
+    #     - {index: 0x6032, sub_index: 0} # 
+    #     - {index: 0x6037, sub_index: 0} # 
+    #     - {index: 0x6040, sub_index: 0} # 
+    #     - {index: 0x6050, sub_index: 0} # 
+    #     - {index: 0x6051, sub_index: 0} # 
+    #   4:
+    #     enabled: true
+    #     cob_id: "auto"
+    #     mapping:
+    #     - {index: 0x6040, sub_index: 0} # 
+    #     - {index: 0x6041, sub_index: 0} # 
+    #     - {index: 0x6042, sub_index: 0} # 
+    #     - {index: 0x6047, sub_index: 0} # 
+    #     - {index: 0x6049, sub_index: 0} # 
+    #     - {index: 0x6052, sub_index: 0} # 
+    #     - {index: 0x6053, sub_index: 0} # 
+
+      
 
       
 
