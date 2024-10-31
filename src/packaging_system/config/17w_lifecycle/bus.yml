@@ -24,6 +24,16 @@ nodes:
     dcf: "packaging_machine.eds"
     driver: "ros2_canopen::LifecycleProxyDriver" 
     package: "canopen_proxy_driver"
+  packaging_machine_1_squeezer:
+    node_id: 60
+    dcf: "C20-120L2C_V1.02.eds"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
+    package: "canopen_proxy_driver"
+  packaging_machine_1_conveyer:
+    node_id: 61
+    dcf: "C20-120L2C_V1.02.eds"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
+    package: "canopen_proxy_driver"
     # period: 100
     # enable_lazy_load: true
     # tpdo:
