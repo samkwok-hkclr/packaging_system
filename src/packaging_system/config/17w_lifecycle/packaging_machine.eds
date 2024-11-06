@@ -8,8 +8,8 @@ Description=The Object Dictionary of Packaging Machine
 CreationTime=3:00PM
 CreationDate=09-17-2024
 CreatedBy=Sam Kwok
-ModificationTime=6:47PM
-ModificationDate=10-31-2024
+ModificationTime=3:52PM
+ModificationDate=11-06-2024
 ModifiedBy=Sam Kwok
 
 [DeviceInfo]
@@ -2023,9 +2023,9 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0006
 AccessType=rw
-HighLimit=3000
+HighLimit=1000
 LowLimit=0
-DefaultValue=500
+DefaultValue=200
 PDOMapping=0
 
 [6071]
@@ -2089,9 +2089,9 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0006
 AccessType=rw
-HighLimit=3000
+HighLimit=1000
 LowLimit=0
-DefaultValue=1000
+DefaultValue=300
 PDOMapping=0
 
 [6081]
