@@ -24,7 +24,7 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     master_bin_path = os.path.join(
-        get_package_share_directory("packaging_system"),
+        get_package_share_directory("packaging_machine_comm"),
         "config",
         "17w_lifecycle",
         "master.bin",
@@ -41,14 +41,14 @@ def generate_launch_description():
         ),
         launch_arguments={
             "master_config": os.path.join(
-                get_package_share_directory("packaging_system"),
+                get_package_share_directory("packaging_machine_comm"),
                 "config",
                 "17w_lifecycle",
                 "master.dcf",
             ),
             "master_bin": master_bin_path,
             "bus_config": os.path.join(
-                get_package_share_directory("packaging_system"),
+                get_package_share_directory("packaging_machine_comm"),
                 "config",
                 "17w_lifecycle",
                 "bus.yml",

@@ -1,0 +1,38 @@
+options:
+  dcf_path: "@BUS_CONFIG_PATH@"
+
+master:
+  node_id: 127
+  driver: "ros2_canopen::LifecycleMasterDriver"
+  package: "canopen_master_driver"
+  baud_rate: 500
+  heartbeat_consumer: true
+  heartbeat_producer: 1000
+  # sync_period: 100000 # 100ms
+
+defaults:
+  heartbeat_consumer: true
+  heartbeat_producer: 1000
+  
+nodes:
+  packaging_machine_1:
+    node_id: 32
+    # vendor_id: 0
+    # product_code: 0
+    # revision_number: 0
+    # polling: true
+    dcf: "packaging_machine.eds"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
+    package: "canopen_proxy_driver"
+  packaging_machine_1_squeezer:
+    node_id: 60
+    dcf: "C20-120L2C_V1.02.eds"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
+    package: "canopen_proxy_driver"
+  packaging_machine_1_conveyer:
+    node_id: 61
+    dcf: "C20-120L2C_V1.02.eds"
+    driver: "ros2_canopen::LifecycleProxyDriver" 
+    package: "canopen_proxy_driver"
+    # period: 100
+    # enable_lazy_load: true
