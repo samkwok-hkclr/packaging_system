@@ -23,6 +23,8 @@
 
 #include "smdps_msgs/srv/packaging_order.hpp"
 
+using namespace std::chrono_literals;
+
 class PackagingMachineManager : public rclcpp::Node
 {
 public:
@@ -50,6 +52,9 @@ private:
 
   // order_id, unique_id
   std::vector<std::pair<uint32_t, uint64_t>> curr_client_;
+
+  rclcpp::CallbackGroup::SharedPtr service_ser_cbg_;
+  rclcpp::CallbackGroup::SharedPtr service_cli_cbg_;
 
   rclcpp::Service<PackagingOrderSrv>::SharedPtr service_;
   rclcpp::Subscription<PackagingMachineStatus>::SharedPtr status_sub_;

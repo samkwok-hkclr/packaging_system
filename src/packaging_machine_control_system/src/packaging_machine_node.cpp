@@ -6,12 +6,20 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
   status_ = std::make_shared<PackagingMachineStatus>();
 
   this->declare_parameter<uint8_t>("packaging_machine_id", 0);
+  this->declare_parameter<bool>("simulation", false);
   this->get_parameter("packaging_machine_id", status_->packaging_machine_id);
+  this->get_parameter("simulation", sim_);
+
   status_->header.frame_id = "Packaging Machine";
   status_->packaging_machine_state = PackagingMachineStatus::IDLE;
 
   status_timer_ = this->create_wall_timer(1s, std::bind(&PackagingMachineNode::pub_status_cb, this));
   status_publisher_ = this->create_publisher<PackagingMachineStatus>("/machine_status", 10); // add a "/" to topic name avoid namespace
+
+  co_read_client_ = this->create_client<CORead>(
+    "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/CO_Read");
+  co_write_client_ = this->create_client<COWrite>(
+    "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/CO_Write");
 
   conveyor_service_ = this->create_service<SetBool>(
     "conveyor_movement", 
@@ -29,6 +37,20 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
     std::bind(&PackagingMachineNode::handle_accepted, this, _1));
 
   RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Packaging Machine Node %d is up.", status_->packaging_machine_id);
+
+  if (sim_ == false)
+  {
+    while (!co_read_client_->wait_for_service(std::chrono::seconds(1))) 
+    {
+      RCLCPP_ERROR(this->get_logger(), "CO_Read Service not available!");
+    }
+    while (!co_write_client_->wait_for_service(std::chrono::seconds(1))) 
+    {
+      RCLCPP_ERROR(this->get_logger(), "CO_Write Service not available!");
+    }
+
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "The CO Service client is up.");
+  }
 }
 
 void PackagingMachineNode::pub_status_cb(void)
@@ -57,20 +79,69 @@ void PackagingMachineNode::conveyor_handle(
     conveyor_state ? "ON" : "OFF");
 }
 
-// TODO
-bool PackagingMachineNode::material_box_gate(bool open)
+bool PackagingMachineNode::ctrl_heater(bool on)
 {
-  // call SDO write service: set solenoid valve
- 
-  return true;
+  return call_co_write(0x6003, 0x0, on ? 1 : 0);
 }
 
-// TODO
-bool stopper_movement(bool protrude)
+bool PackagingMachineNode::ctrl_material_box_gate(bool protrude)
 {
-  // call SDO write service: set solenoid valve
+  return call_co_write(0x6050, 0x0, protrude ? 0 : 1);
+}
 
-  return true;
+bool PackagingMachineNode::ctrl_material_box_gate(bool protrude)
+{
+  return call_co_write(0x6050, 0x0, protrude ? 0 : 1);
+}
+
+bool PackagingMachineNode::ctrl_stopper(bool open)
+{
+  return call_co_write(0x6051, 0x0, open ? 1 : 0);
+}
+
+bool PackagingMachineNode::ctrl_cutter(bool cut)
+{
+  return call_co_write(0x6052, 0x0, cut ? 1 : 0);
+}
+
+bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uint32_t _data)
+{
+  auto request = std::make_shared<COWrite::Request>();
+
+  request->index = _index;
+  request->subindex = _subindex;
+  request->data = _data;
+
+  auto future = co_write_client_->async_send_request(request);
+  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) == rclcpp::FutureReturnCode::SUCCESS)
+  {
+    auto response = future.get();
+    RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "OK");
+    return response->success;
+  } else {
+    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to call service CO_Write");
+    return false;
+  }
+}
+
+bool PackagingMachineNode::call_co_read(uint16_t _index, uint8_t _subindex, std::shared_ptr<uint32_t> _data)
+{
+  auto request = std::make_shared<CORead::Request>();
+
+  request->index = _index;
+  request->subindex = _subindex;
+
+  auto future = co_read_client_->async_send_request(request);
+  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) == rclcpp::FutureReturnCode::SUCCESS)
+  {
+    auto response = future.get();
+    *_data = response->data;
+    RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "OK");
+    return response->success;
+  } else {
+    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to call service CO_Write");
+    return false;
+  }
 }
 
 rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(

@@ -15,7 +15,7 @@ def generate_launch_description():
                 # name=f'packaging_machine_node_{i}',
                 parameters=[
                     {'packaging_machine_id': i},
-                    {'simulation': False}
+                    {'simulation': True}
                 ],
                 respawn=True,
                 respawn_delay=5,

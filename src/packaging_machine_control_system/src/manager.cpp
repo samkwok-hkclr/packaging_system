@@ -29,16 +29,30 @@ PackagingMachineManager::PackagingMachineManager(
 
   executor_->add_node(action_client_manager_);
 
+  service_ser_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  service_cli_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
   service_ = this->create_service<PackagingOrderSrv>(
     packaging_order_service_name, 
     std::bind(&PackagingMachineManager::packaging_order_handle, 
       this, 
       std::placeholders::_1, 
-      std::placeholders::_2));
+      std::placeholders::_2),
+    rmw_qos_profile_services_default,
+    service_ser_cbg_);
 
-  load_node_client_ = this->create_client<LoadNode>(load_node_service_name);
-  unload_node_client_ = this->create_client<UnloadNode>(unload_node_service_name);
-  list_node_client_ = this->create_client<ListNodes>(list_nodes_service_name);
+  load_node_client_ = this->create_client<LoadNode>(
+    load_node_service_name,
+    rmw_qos_profile_services_default,
+    service_cli_cbg_);
+  unload_node_client_ = this->create_client<UnloadNode>(
+    unload_node_service_name,
+    rmw_qos_profile_services_default,
+    service_cli_cbg_);
+  list_node_client_ = this->create_client<ListNodes>(
+    list_nodes_service_name,
+    rmw_qos_profile_services_default,
+    service_cli_cbg_);
 
   while (!load_node_client_->wait_for_service(std::chrono::seconds(1))) 
   {
@@ -60,11 +74,13 @@ void PackagingMachineManager::status_cb(const PackagingMachineStatus::SharedPtr 
 {
   const std::lock_guard<std::mutex> lock(this->mutex_);
   packaging_machine_status[msg->packaging_machine_id] = *msg;
+  // RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "packaging_machine_status size: %ld", packaging_machine_status.size());
 }
 
 void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedPtr msg)
 {
   const std::lock_guard<std::mutex> lock(this->mutex_);
+
   auto target = std::find_if(curr_client_.begin(), curr_client_.end(),
     [msg](const std::pair<uint32_t, uint64_t>& entry) {
       return entry.first == msg->order_id;
@@ -85,7 +101,7 @@ void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedP
         auto target_unique_id = std::find(srv_result->unique_ids.begin(), srv_result->unique_ids.end(), target->second);
         if (target_unique_id != srv_result->unique_ids.end()) 
         {
-          RCLCPP_INFO(this->get_logger(), "The target unique_id is found. Try to unload it now.");
+          RCLCPP_INFO(this->get_logger(), "The target unique_id is found in current loaded. Try to unload it now.");
 
           auto unload_node_srv_request = std::make_shared<UnloadNode::Request>();
           unload_node_srv_request->unique_id = target->second;
@@ -96,12 +112,12 @@ void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedP
             auto srv_result = future.get();
             if (srv_result) 
             {
-              RCLCPP_INFO(this->get_logger(), "The action client is removed (unique_id: %ld)", target->second);
+              curr_client_.erase(target);
+              RCLCPP_INFO(this->get_logger(), "The action client is unloaded (unique_id: %ld)", target->second);
             } else {
               RCLCPP_ERROR(this->get_logger(), "Service call failed or returned no result");
             }
           };
-
           auto future = unload_node_client_->async_send_request(unload_node_srv_request, response_received_cb);
         } else {
           RCLCPP_ERROR(this->get_logger(), "The action client is not found in ListNodes Service");
@@ -122,6 +138,7 @@ void PackagingMachineManager::packaging_order_handle(
   std::shared_ptr<PackagingOrderSrv::Response> response)
 {
   RCLCPP_INFO(this->get_logger(), "service handle");
+  const std::lock_guard<std::mutex> lock(this->mutex_);
 
   // TODO: simpfy this function
   // find the idle packaging machine
@@ -140,6 +157,7 @@ void PackagingMachineManager::packaging_order_handle(
     response->success = false;
     response->message = "Packaging Machines are busy";
     RCLCPP_ERROR(this->get_logger(), "Packaging Machines are busy");
+    return;
   }
 
   auto load_node_srv_request = std::make_shared<LoadNode::Request>();
@@ -149,28 +167,28 @@ void PackagingMachineManager::packaging_order_handle(
 
   rcl_interfaces::msg::Parameter p1;
   rcl_interfaces::msg::ParameterValue p1_v;
-  p1_v.type = 2;
+  p1_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p1_v.integer_value = target_machine_id;
   p1.name = "packaging_machine_id";
   p1.value = p1_v;
 
   rcl_interfaces::msg::Parameter p2;
   rcl_interfaces::msg::ParameterValue p2_v;
-  p2_v.type = 2;
+  p2_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p2_v.integer_value = request->order_id;
   p2.name = "order_id";
   p2.value = p2_v;
 
   rcl_interfaces::msg::Parameter p3;
   rcl_interfaces::msg::ParameterValue p3_v;
-  p3_v.type = 2;
+  p3_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p3_v.integer_value = request->material_box_id;
   p3.name = "material_box_id";
   p3.value = p3_v;
 
   rcl_interfaces::msg::Parameter p4;
   rcl_interfaces::msg::ParameterValue p4_v;
-  p4_v.type = 9;
+  p4_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
   p4_v.string_array_value.assign(request->print_info.begin(), request->print_info.end());
   p4.name = "print_info";
   p4.value = p4_v;
@@ -190,25 +208,32 @@ void PackagingMachineManager::packaging_order_handle(
         const std::lock_guard<std::mutex> lock(this->mutex_);
         curr_client_.push_back(_pair);
       }
-      RCLCPP_INFO(this->get_logger(), "Added a ID: %d ", srv_result->success);
-      response->success = srv_result->success;
-
+      RCLCPP_INFO(this->get_logger(), "Loaded a action client. unique_id: %ld ", srv_result->unique_id);
     } else {
-      response->success = srv_result->success;
       response->message = "Service call failed or returned no result";
       RCLCPP_ERROR(this->get_logger(), "Service call failed or returned no result");
     }
   };
 
   auto future = load_node_client_->async_send_request(load_node_srv_request, response_received_callback);
+  std::future_status status = future.wait_for(100ms);
+  switch (status)
+  {
+  case std::future_status::ready:
+    response->success = true;
+    break; 
+  default:
+    RCLCPP_ERROR(this->get_logger(), "Error in wait_for");
+    break;
+  }
 }
-
 
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  auto exec = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  // auto exec = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  auto exec = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
 
   auto options = rclcpp::NodeOptions();
   auto node = std::make_shared<PackagingMachineManager>(

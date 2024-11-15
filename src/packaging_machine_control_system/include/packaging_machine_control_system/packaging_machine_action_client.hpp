@@ -26,7 +26,7 @@ class PackagingMachineActionClient : public rclcpp::Node
   using PackagingResult = smdps_msgs::msg::PackagingResult;
   using PackagingOrder = smdps_msgs::action::PackagingOrder;
   using GaolHandlerPackagingOrder = rclcpp_action::ClientGoalHandle<PackagingOrder>; 
-  
+
 public:
   explicit PackagingMachineActionClient(const rclcpp::NodeOptions & options);
   
@@ -43,6 +43,8 @@ private:
 
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp_action::Client<PackagingOrder>::SharedPtr client_ptr_;
+
+
 
   rclcpp::Publisher<PackagingResult>::SharedPtr result_pub_;
 

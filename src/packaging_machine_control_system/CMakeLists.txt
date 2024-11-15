@@ -28,6 +28,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(composition_interfaces REQUIRED)
+find_package(canopen_interfaces REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -62,6 +63,7 @@ ament_target_dependencies(packaging_machine_node
   rclcpp_action
   rclcpp_components
   smdps_msgs
+  canopen_interfaces
 )
 
 add_library(packaging_machine_action_client SHARED
