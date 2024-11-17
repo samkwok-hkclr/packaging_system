@@ -8,14 +8,14 @@ PackagingMachineManager::PackagingMachineManager(
 : Node(std::move(node_name), node_namespace, options),
   executor_(executor)
 {
-  status_sub_ = create_subscription<PackagingMachineStatus>(
+  status_sub_ = this->create_subscription<PackagingMachineStatus>(
     "machine_status", 
     10, 
     std::bind(&PackagingMachineManager::status_cb, 
       this, 
       std::placeholders::_1));
   
-  packagin_result_sub_ = create_subscription<PackagingResult>(
+  packaging_result_sub_ = this->create_subscription<PackagingResult>(
     "packaging_result", 
     10, 
     std::bind(&PackagingMachineManager::packaging_result_cb, 
@@ -29,8 +29,8 @@ PackagingMachineManager::PackagingMachineManager(
 
   executor_->add_node(action_client_manager_);
 
-  service_ser_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-  service_cli_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  srv_ser_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  srv_cli_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
   service_ = this->create_service<PackagingOrderSrv>(
     packaging_order_service_name, 
@@ -39,20 +39,20 @@ PackagingMachineManager::PackagingMachineManager(
       std::placeholders::_1, 
       std::placeholders::_2),
     rmw_qos_profile_services_default,
-    service_ser_cbg_);
+    srv_ser_cbg_);
 
   load_node_client_ = this->create_client<LoadNode>(
     load_node_service_name,
     rmw_qos_profile_services_default,
-    service_cli_cbg_);
+    srv_cli_cbg_);
   unload_node_client_ = this->create_client<UnloadNode>(
     unload_node_service_name,
     rmw_qos_profile_services_default,
-    service_cli_cbg_);
+    srv_cli_cbg_);
   list_node_client_ = this->create_client<ListNodes>(
     list_nodes_service_name,
     rmw_qos_profile_services_default,
-    service_cli_cbg_);
+    srv_cli_cbg_);
 
   while (!load_node_client_->wait_for_service(std::chrono::seconds(1))) 
   {
@@ -84,7 +84,7 @@ void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedP
   auto target = std::find_if(curr_client_.begin(), curr_client_.end(),
     [msg](const std::pair<uint32_t, uint64_t>& entry) {
       return entry.first == msg->order_id;
-    });
+  });
   
   if (target != curr_client_.end()) 
   {
@@ -99,6 +99,7 @@ void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedP
       if (srv_result) 
       {
         auto target_unique_id = std::find(srv_result->unique_ids.begin(), srv_result->unique_ids.end(), target->second);
+
         if (target_unique_id != srv_result->unique_ids.end()) 
         {
           RCLCPP_INFO(this->get_logger(), "The target unique_id is found in current loaded. Try to unload it now.");
@@ -114,15 +115,18 @@ void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedP
             {
               curr_client_.erase(target);
               RCLCPP_INFO(this->get_logger(), "The action client is unloaded (unique_id: %ld)", target->second);
-            } else {
+            } else 
+            {
               RCLCPP_ERROR(this->get_logger(), "Service call failed or returned no result");
             }
           };
           auto future = unload_node_client_->async_send_request(unload_node_srv_request, response_received_cb);
-        } else {
+        } else 
+        {
           RCLCPP_ERROR(this->get_logger(), "The action client is not found in ListNodes Service");
         }
-      } else {
+      } else 
+      {
         RCLCPP_ERROR(this->get_logger(), "Service call failed or returned no result");
       }
     };
@@ -140,25 +144,20 @@ void PackagingMachineManager::packaging_order_handle(
   RCLCPP_INFO(this->get_logger(), "service handle");
   const std::lock_guard<std::mutex> lock(this->mutex_);
 
-  // TODO: simpfy this function
-  // find the idle packaging machine
-  uint8_t target_machine_id = 0;
-  for (const auto& entry : packaging_machine_status)
-  {
-    if (entry.second.packaging_machine_state == PackagingMachineStatus::IDLE)
-    {
-      target_machine_id = entry.second.packaging_machine_id;
-      break;
-    }
-  }
+  auto it = std::find_if(packaging_machine_status.begin(), packaging_machine_status.end(),
+    [](const auto& entry) {
+        return entry.second.packaging_machine_state == PackagingMachineStatus::IDLE;
+  });
 
-  if (target_machine_id == 0) 
+  if (it == packaging_machine_status.end()) 
   {
     response->success = false;
     response->message = "Packaging Machines are busy";
     RCLCPP_ERROR(this->get_logger(), "Packaging Machines are busy");
     return;
   }
+
+  uint8_t target_machine_id = it->second.packaging_machine_id;
 
   auto load_node_srv_request = std::make_shared<LoadNode::Request>();
   load_node_srv_request->package_name = "packaging_machine_control_system";
@@ -200,31 +199,39 @@ void PackagingMachineManager::packaging_order_handle(
 
   using ServiceResponseFuture = rclcpp::Client<LoadNode>::SharedFuture;
 
-  auto response_received_callback = [this, request, response](ServiceResponseFuture future) {
+  auto response_received_cb = [this, request, response](ServiceResponseFuture future) {
     auto srv_result = future.get();
-    if (srv_result) {
+    if (srv_result) 
+    {
       std::pair<uint32_t, uint64_t> _pair(request->order_id, srv_result->unique_id);
       {
         const std::lock_guard<std::mutex> lock(this->mutex_);
         curr_client_.push_back(_pair);
       }
       RCLCPP_INFO(this->get_logger(), "Loaded a action client. unique_id: %ld ", srv_result->unique_id);
-    } else {
-      response->message = "Service call failed or returned no result";
-      RCLCPP_ERROR(this->get_logger(), "Service call failed or returned no result");
+    } else 
+    {
+      std::string err_msg = "Service call failed or returned no result";
+      response->message = err_msg;
+      RCLCPP_ERROR(this->get_logger(), err_msg.c_str());
     }
   };
 
-  auto future = load_node_client_->async_send_request(load_node_srv_request, response_received_callback);
-  std::future_status status = future.wait_for(100ms);
+  auto future = load_node_client_->async_send_request(load_node_srv_request, response_received_cb);
+
+  std::future_status status = future.wait_for(500ms);
   switch (status)
   {
   case std::future_status::ready:
     response->success = true;
     break; 
-  default:
-    RCLCPP_ERROR(this->get_logger(), "Error in wait_for");
+  default: {
+    response->success = false;
+    std::string err_msg = "The Loadnode Service is waited too long.";
+    response->message = err_msg;
+    RCLCPP_ERROR(this->get_logger(), err_msg.c_str());
     break;
+  }
   }
 }
 

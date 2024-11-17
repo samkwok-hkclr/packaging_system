@@ -13,13 +13,20 @@
 
 #include "std_srvs/srv/set_bool.hpp"
 
-#include "smdps_msgs/msg/packaging_machine_status.hpp"
 #include "smdps_msgs/action/packaging_order.hpp"
+#include "smdps_msgs/msg/packaging_machine_status.hpp"
+#include "smdps_msgs/msg/packaging_machine_info.hpp"
+#include "smdps_msgs/msg/motor_status.hpp"
 
+#include "canopen_interfaces/msg/co_data.hpp"
 #include "canopen_interfaces/srv/co_read.hpp"
 #include "canopen_interfaces/srv/co_write.hpp"
 
-#define GRIDS 2
+#define GRIDS 28
+
+#define NO_OF_REED_SWITCHS 8
+#define NO_OF_VALVES 4
+#define NO_OF_PHOTOELECTRIC_SENSERS 8
 
 using namespace std::chrono_literals;
 
@@ -27,10 +34,15 @@ class PackagingMachineNode : public rclcpp::Node
 {
 public:
   using SetBool = std_srvs::srv::SetBool;
+
   using PackagingMachineStatus = smdps_msgs::msg::PackagingMachineStatus;
+  using PackagingMachineInfo = smdps_msgs::msg::PackagingMachineInfo;
+  using MotorStatus = smdps_msgs::msg::MotorStatus;
   using PackagingOrder = smdps_msgs::action::PackagingOrder;
+
   using GaolHandlerPackagingOrder = rclcpp_action::ServerGoalHandle<PackagingOrder>;
 
+  using COData = canopen_interfaces::msg::COData;
   using CORead = canopen_interfaces::srv::CORead;
   using COWrite = canopen_interfaces::srv::COWrite;
 
@@ -46,10 +58,13 @@ public:
     std::shared_ptr<SetBool::Response> response);
   
   // packaging machine operation
-  bool ctrl_heater(bool on); 
-  bool ctrl_material_box_gate(bool open); 
-  bool ctrl_stopper(bool protrude); 
-  bool ctrl_cutter(bool cut); 
+  bool ctrl_heater(const bool on); 
+  bool ctrl_material_box_gate(const bool open); 
+  bool ctrl_stopper(const bool protrude); 
+  bool ctrl_cutter(const bool cut); 
+  bool ctrl_conveyor(const bool dir, const uint16_t speed, const bool stop_by_ph, const bool ctrl);
+
+  void rpdo_cb(const COData::SharedPtr msg);
 
   rclcpp_action::GoalResponse handle_goal(
     const rclcpp_action::GoalUUID & uuid, 
@@ -65,9 +80,15 @@ private:
 
   bool sim_;
   std::shared_ptr<PackagingMachineStatus> status_;
+  std::shared_ptr<MotorStatus> motor_status_;
+  std::shared_ptr<PackagingMachineInfo> info_;
 
   rclcpp::TimerBase::SharedPtr status_timer_;
   rclcpp::Publisher<PackagingMachineStatus>::SharedPtr status_publisher_;
+  rclcpp::Publisher<MotorStatus>::SharedPtr motor_status_publisher_;
+
+  rclcpp::Publisher<COData>::SharedPtr tpdo_pub_;
+  rclcpp::Subscription<COData>::SharedPtr rpdo_sub_;
 
   rclcpp::Service<SetBool>::SharedPtr conveyor_service_;
 
@@ -77,6 +98,6 @@ private:
   rclcpp_action::Server<PackagingOrder>::SharedPtr action_server_;
 }; // class PackagingMachineNode
 
-RCLCPP_COMPONENTS_REGISTER_NODE(PackagingMachineNode)
+// RCLCPP_COMPONENTS_REGISTER_NODE(PackagingMachineNode)
 
 #endif  // PACKAGING_MACHINE_NODE_HPP_

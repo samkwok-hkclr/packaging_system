@@ -53,12 +53,12 @@ private:
   // order_id, unique_id
   std::vector<std::pair<uint32_t, uint64_t>> curr_client_;
 
-  rclcpp::CallbackGroup::SharedPtr service_ser_cbg_;
-  rclcpp::CallbackGroup::SharedPtr service_cli_cbg_;
+  rclcpp::CallbackGroup::SharedPtr srv_ser_cbg_;
+  rclcpp::CallbackGroup::SharedPtr srv_cli_cbg_;
 
   rclcpp::Service<PackagingOrderSrv>::SharedPtr service_;
   rclcpp::Subscription<PackagingMachineStatus>::SharedPtr status_sub_;
-  rclcpp::Subscription<PackagingResult>::SharedPtr packagin_result_sub_;
+  rclcpp::Subscription<PackagingResult>::SharedPtr packaging_result_sub_;
 
   std::map<uint8_t, PackagingMachineStatus> packaging_machine_status;
 

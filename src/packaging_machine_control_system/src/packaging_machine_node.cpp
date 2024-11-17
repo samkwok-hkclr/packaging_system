@@ -4,6 +4,7 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
 : Node("packaging_machine_node", options)
 {
   status_ = std::make_shared<PackagingMachineStatus>();
+  info_ = std::make_shared<PackagingMachineInfo>();
 
   this->declare_parameter<uint8_t>("packaging_machine_id", 0);
   this->declare_parameter<bool>("simulation", false);
@@ -13,9 +14,27 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
   status_->header.frame_id = "Packaging Machine";
   status_->packaging_machine_state = PackagingMachineStatus::IDLE;
 
-  status_timer_ = this->create_wall_timer(1s, std::bind(&PackagingMachineNode::pub_status_cb, this));
-  status_publisher_ = this->create_publisher<PackagingMachineStatus>("/machine_status", 10); // add a "/" to topic name avoid namespace
+  info_->rs_state.reserve(NO_OF_REED_SWITCHS);
+  info_->valve_state.reserve(NO_OF_VALVES);
+  info_->ph_state.reserve(NO_OF_PHOTOELECTRIC_SENSERS);
 
+  status_timer_ = this->create_wall_timer(1s, std::bind(&PackagingMachineNode::pub_status_cb, this));
+
+  // add a "/" prefix to topic name avoid adding a namespace
+  status_publisher_ = this->create_publisher<PackagingMachineStatus>("/machine_status", 10); 
+
+  motor_status_publisher_ = this->create_publisher<MotorStatus>("motor_status", 10); 
+
+  tpdo_pub_ = this->create_publisher<COData>(
+    "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/tpdo", 
+    10);
+  rpdo_sub_ = this->create_subscription<COData>(
+    "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/rpdo", 
+    10, 
+    std::bind(&PackagingMachineNode::rpdo_cb, 
+      this, 
+      std::placeholders::_1));
+  
   co_read_client_ = this->create_client<CORead>(
     "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/CO_Read");
   co_write_client_ = this->create_client<COWrite>(
@@ -49,6 +68,9 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
       RCLCPP_ERROR(this->get_logger(), "CO_Write Service not available!");
     }
 
+    // ctrl_stopper(0);
+    // status_->conveyor_state = PackagingMachineStatus::AVAILABLE;
+
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "The CO Service client is up.");
   }
 }
@@ -60,49 +82,6 @@ void PackagingMachineNode::pub_status_cb(void)
   status_publisher_->publish(*status_);
 }
 
-// TODO
-void PackagingMachineNode::conveyor_handle(
-  const std::shared_ptr<SetBool::Request> request, 
-  std::shared_ptr<SetBool::Response> response)
-{
-  (void) request;
-  // call SDO write service: set movement
-
-  // call SDO Read service: conveyor state
-
-  // fake state
-  bool conveyor_state = false;
-  response->success = true;
-
-  RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "ID [%d] is %s", 
-    status_->packaging_machine_id, 
-    conveyor_state ? "ON" : "OFF");
-}
-
-bool PackagingMachineNode::ctrl_heater(bool on)
-{
-  return call_co_write(0x6003, 0x0, on ? 1 : 0);
-}
-
-bool PackagingMachineNode::ctrl_material_box_gate(bool protrude)
-{
-  return call_co_write(0x6050, 0x0, protrude ? 0 : 1);
-}
-
-bool PackagingMachineNode::ctrl_material_box_gate(bool protrude)
-{
-  return call_co_write(0x6050, 0x0, protrude ? 0 : 1);
-}
-
-bool PackagingMachineNode::ctrl_stopper(bool open)
-{
-  return call_co_write(0x6051, 0x0, open ? 1 : 0);
-}
-
-bool PackagingMachineNode::ctrl_cutter(bool cut)
-{
-  return call_co_write(0x6052, 0x0, cut ? 1 : 0);
-}
 
 bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uint32_t _data)
 {
@@ -113,7 +92,8 @@ bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uin
   request->data = _data;
 
   auto future = co_write_client_->async_send_request(request);
-  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) == rclcpp::FutureReturnCode::SUCCESS)
+
+  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
   {
     auto response = future.get();
     RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "OK");
@@ -132,7 +112,8 @@ bool PackagingMachineNode::call_co_read(uint16_t _index, uint8_t _subindex, std:
   request->subindex = _subindex;
 
   auto future = co_read_client_->async_send_request(request);
-  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) == rclcpp::FutureReturnCode::SUCCESS)
+
+  if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
   {
     auto response = future.get();
     *_data = response->data;
@@ -144,27 +125,168 @@ bool PackagingMachineNode::call_co_read(uint16_t _index, uint8_t _subindex, std:
   }
 }
 
+void PackagingMachineNode::rpdo_cb(const COData::SharedPtr msg)
+{
+  const std::lock_guard<std::mutex> lock(this->mutex_);
+  switch (msg->index)
+  {
+  case 0x6001:
+    info_->temperature = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6008:
+    info_->temperature_ctrl = static_cast<uint16_t>(msg->data);
+    break;
+  case 0x6018:
+    motor_status_->pkg_dis_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6026:
+    motor_status_->pill_gate_loc = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6028:
+    motor_status_->pill_gate_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6038:
+    motor_status_->roller_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6046:
+    motor_status_->pkg_len_loc = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6048:
+    motor_status_->pkg_len_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6058: {
+    uint8_t input = static_cast<uint8_t>(msg->data);
+    for (int i = NO_OF_VALVES - 1; i >= 0; i--) 
+    {
+      info_->valve_state[i] = (input & 1);
+      input >>= 1;
+    }
+    break;
+  }
+  case 0x6068: {
+    uint8_t input = static_cast<uint8_t>(msg->data);
+    for (int i = NO_OF_REED_SWITCHS - 1; i >= 0; i--) 
+    {
+      info_->rs_state[i] = (input & 1);
+      input >>= 1;
+    }
+    break;
+  }
+  case 0x6076:
+    motor_status_->squ_loc = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6078:
+    motor_status_->squ_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6088:
+    motor_status_->con_state = static_cast<uint8_t>(msg->data);
+    break;
+  case 0x6090: {
+    uint8_t input = static_cast<uint16_t>(msg->data);
+    for (int i = NO_OF_PHOTOELECTRIC_SENSERS - 1; i >= 0; i--) 
+    {
+      info_->ph_state[i] = (input & 1);
+      input >>= 1;
+    }
+    break;
+  }
+  }
+}
+
+void PackagingMachineNode::conveyor_handle(
+  const std::shared_ptr<SetBool::Request> request, 
+  std::shared_ptr<SetBool::Response> response)
+{
+  if (ctrl_conveyor(1, 0, 0, request->data))
+    response->success = true;
+  else
+  {
+    response->success = false;
+    response->message = "Error to control the conveyor";
+  }
+}
+
+bool PackagingMachineNode::ctrl_heater(const bool on)
+{
+  return call_co_write(0x6003, 0x0, on ? 1 : 0);
+}
+
+bool PackagingMachineNode::ctrl_material_box_gate(const bool open)
+{
+  return call_co_write(0x6050, 0x0, open ? 1 : 0); // FIXME: confirm the open code
+}
+
+bool PackagingMachineNode::ctrl_stopper(const bool protrude)
+{
+  return call_co_write(0x6051, 0x0, protrude ? 0 : 1); // FIXME: confirm the protrude code
+}
+
+bool PackagingMachineNode::ctrl_cutter(const bool cut)
+{
+  return call_co_write(0x6052, 0x0, cut ? 1 : 0); // FIXME: confirm the protrude code
+}
+
+bool PackagingMachineNode::ctrl_conveyor(
+  const bool dir, 
+  const uint16_t speed, 
+  const bool stop_by_ph, 
+  const bool ctrl)
+{
+  bool result = true;
+  if (speed > 0)
+  {
+    result &= call_co_write(0x6080, 0x0, speed);
+  }
+  result &= call_co_write(0x6082, 0x0, dir ? 1 : 0); // FIXME: confirm the direction code
+  result &= call_co_write(0x6081, 0x0, stop_by_ph ? 1 : 0);
+  result &= call_co_write(0x6089, 0x0, ctrl ? 1 : 0);
+  
+  return result;
+}
+
 rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
   const rclcpp_action::GoalUUID & uuid,
   std::shared_ptr<const PackagingOrder::Goal> goal)
 {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(), "print_info size: %lu", goal->print_info.size());
-  if (goal->print_info.size() == GRIDS)
+
+  // Assume the print_info size MUST be 28
   {
+    const std::lock_guard<std::mutex> lock(this->mutex_);
+    status_->packaging_machine_state = PackagingMachineStatus::BLOCKING;
+    status_->conveyor_state = PackagingMachineStatus::UNAVAILABLE;
+    ctrl_stopper(1);
+    if (!ctrl_conveyor(1, 0, 1, 1))
+    {
+      status_->packaging_machine_state = PackagingMachineStatus::ERROR;
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+  }
+
+  // TODO: read the photoelectic sensor state to make sure the material box is stopped
+  uint8_t retry = 0;
+  uint8_t MAX_RETRY = 3;
+  rclcpp::Rate loop_rate(1s); 
+  for (; retry < MAX_RETRY && rclcpp::ok(); ++retry) 
+  {
+    if (info_->ph_state[0]) 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
       status_->packaging_machine_state = PackagingMachineStatus::BUSY;
+      break;
     }
-    RCLCPP_INFO(this->get_logger(), "Received goal request with order %u", goal->order_id);
-    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    loop_rate.sleep();
   }
-  else
+  if (retry >= MAX_RETRY)
   {
-    RCLCPP_ERROR(this->get_logger(), "Received goal request with order %u: Order Length Error", goal->order_id);
+    const std::lock_guard<std::mutex> lock(this->mutex_);
+    status_->packaging_machine_state = PackagingMachineStatus::ERROR;
     return rclcpp_action::GoalResponse::REJECT;
   }
-  RCLCPP_INFO(this->get_logger(), "handle_goal end");
+
+  RCLCPP_INFO(this->get_logger(), "Received goal request with order %u", goal->order_id);
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
 rclcpp_action::CancelResponse PackagingMachineNode::handle_cancel(
@@ -177,9 +299,7 @@ rclcpp_action::CancelResponse PackagingMachineNode::handle_cancel(
 
 void PackagingMachineNode::handle_accepted(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle)
 {
-  using namespace std::placeholders;
-  // this needs to return quickly to avoid blocking the executor, so spin up a new thread
-  std::thread{std::bind(&PackagingMachineNode::order_execute, this, _1), goal_handle}.detach();
+  std::thread{std::bind(&PackagingMachineNode::order_execute, this, std::placeholders::_1), goal_handle}.detach();
 }
 
 void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle)
