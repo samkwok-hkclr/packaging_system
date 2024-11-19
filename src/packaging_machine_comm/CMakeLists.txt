@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(lely_core_libraries REQUIRED)
 
 cogen_dcf(17w_lifecycle)
+cogen_dcf(maishuo_lifecycle)
 
 install(DIRECTORY
   launch 

@@ -3,9 +3,9 @@ version: '3.7'
 services:
   packaging_system:
     image: packaging_system:v0
-    container_name: packaging_system
-    hostname: packaging_system
-    command: "ros2 launch packaging_system 17w_lifecycle_setup.launch.py"
+    container_name: packaging_machine_comm
+    hostname: packaging_machine_comm
+    command: "ros2 launch packaging_machine_comm maishuo_lifecycle_setup.launch.py"
     # security_opt: 
     #   - no-new-privileges:true
     ports:
