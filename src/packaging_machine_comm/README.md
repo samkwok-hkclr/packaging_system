@@ -1,3 +1,3 @@
 # Packaging Machine Communication
 
-This repository manages CANopen message communication for packaging machines.
+This package manages CANopen message communication for packaging machines.
