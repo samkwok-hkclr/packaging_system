@@ -30,6 +30,9 @@ find_package(std_srvs REQUIRED)
 find_package(composition_interfaces REQUIRED)
 find_package(canopen_interfaces REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_search_module(LIBUSB REQUIRED libusb-1.0)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -52,10 +55,14 @@ ament_target_dependencies(packaging_machine_manager
   rclcpp_components
   rcl_interfaces
   composition_interfaces
-  smdps_msgs)
+  smdps_msgs
+)
 
-add_executable(packaging_machine_node src/packaging_machine_node.cpp)
-target_link_libraries(packaging_machine_node)
+add_executable(packaging_machine_node 
+  src/packaging_machine_node.cpp
+  src/printer/printer.cpp
+)
+target_link_libraries(packaging_machine_node ${LIBUSB_LIBRARIES})
 ament_target_dependencies(packaging_machine_node 
   std_msgs
   std_srvs
@@ -64,6 +71,12 @@ ament_target_dependencies(packaging_machine_node
   rclcpp_components
   smdps_msgs
   canopen_interfaces
+)
+target_include_directories(packaging_machine_node
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${LIBUSB_INCLUDE_DIRS} 
 )
 
 add_library(packaging_machine_action_client SHARED
@@ -74,7 +87,8 @@ ament_target_dependencies(packaging_machine_action_client
   rclcpp
   rclcpp_action
   rclcpp_components
-  smdps_msgs)
+  smdps_msgs
+)
 rclcpp_components_register_nodes(packaging_machine_action_client "action_client::PackagingMachineActionClient")
 # rclcpp_components_register_nodes(packaging_machine_action_client PLUGIN 
 #   "packaging_machine_action_client_cpp::packaging_machine_action_client" 

@@ -29,7 +29,6 @@ PackagingMachineManager::PackagingMachineManager(
 
   executor_->add_node(action_client_manager_);
 
-  srv_ser_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   srv_cli_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
   service_ = this->create_service<PackagingOrderSrv>(
@@ -37,9 +36,7 @@ PackagingMachineManager::PackagingMachineManager(
     std::bind(&PackagingMachineManager::packaging_order_handle, 
       this, 
       std::placeholders::_1, 
-      std::placeholders::_2),
-    rmw_qos_profile_services_default,
-    srv_ser_cbg_);
+      std::placeholders::_2));
 
   load_node_client_ = this->create_client<LoadNode>(
     load_node_service_name,

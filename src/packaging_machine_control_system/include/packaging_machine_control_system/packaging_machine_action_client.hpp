@@ -44,8 +44,6 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp_action::Client<PackagingOrder>::SharedPtr client_ptr_;
 
-
-
   rclcpp::Publisher<PackagingResult>::SharedPtr result_pub_;
 
   void goal_response_callback(const GaolHandlerPackagingOrder::SharedPtr & goal_handle);

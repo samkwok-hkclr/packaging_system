@@ -23,6 +23,7 @@ RUN apt install -y ros-${ROS_DISTRO}-ros-base
 
 RUN apt install -y build-essential cmake git wget dos2unix \
     python3-colcon-common-extensions python3-pip python3-rosdep python3-vcstool \
+    libusb-1.0-0-dev libusb-dev \
     ros-${ROS_DISTRO}-rosbridge-server \
     ros-${ROS_DISTRO}-controller-interface \ 
     ros-${ROS_DISTRO}-diagnostic-updater \

@@ -1,0 +1,7 @@
+usbipd list
+
+usbipd bind --busid <busid>
+
+usbipd attach --wsl --busid <busid>
+
+sudo chmod -R 777 /dev/bus/usb/

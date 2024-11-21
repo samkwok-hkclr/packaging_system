@@ -42,6 +42,7 @@ public:
     const std::string & node_name,
     const std::string & node_namespace,
     const rclcpp::NodeOptions & options);
+  ~PackagingMachineManager() = default;
 
   void packaging_order_handle(
     const std::shared_ptr<PackagingOrderSrv::Request> request, 
@@ -53,7 +54,6 @@ private:
   // order_id, unique_id
   std::vector<std::pair<uint32_t, uint64_t>> curr_client_;
 
-  rclcpp::CallbackGroup::SharedPtr srv_ser_cbg_;
   rclcpp::CallbackGroup::SharedPtr srv_cli_cbg_;
 
   rclcpp::Service<PackagingOrderSrv>::SharedPtr service_;
