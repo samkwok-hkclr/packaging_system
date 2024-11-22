@@ -20,6 +20,7 @@
 
 #include "smdps_msgs/msg/packaging_machine_status.hpp"
 #include "smdps_msgs/msg/packaging_result.hpp"
+#include "smdps_msgs/msg/unbind_order_id.hpp"
 
 #include "smdps_msgs/srv/packaging_order.hpp"
 
@@ -30,6 +31,7 @@ class PackagingMachineManager : public rclcpp::Node
 public:
   using PackagingMachineStatus = smdps_msgs::msg::PackagingMachineStatus;
   using PackagingResult = smdps_msgs::msg::PackagingResult;
+  using UnbindOrderId = smdps_msgs::msg::UnbindOrderId;
 
   using PackagingOrderSrv = smdps_msgs::srv::PackagingOrder;
 
@@ -57,11 +59,15 @@ private:
   rclcpp::CallbackGroup::SharedPtr srv_cli_cbg_;
 
   rclcpp::Service<PackagingOrderSrv>::SharedPtr service_;
+
   rclcpp::Subscription<PackagingMachineStatus>::SharedPtr status_sub_;
   rclcpp::Subscription<PackagingResult>::SharedPtr packaging_result_sub_;
 
-  std::map<uint8_t, PackagingMachineStatus> packaging_machine_status;
+  rclcpp::Publisher<UnbindOrderId>::SharedPtr unbind_order_id_publisher_;
 
+  // packaging_machine_id, PackagingMachineStatus
+  std::map<uint8_t, PackagingMachineStatus> packaging_machine_status;
+  
   const std::string action_client_manager_node_name = "action_client_manager";
   const std::string load_node_service_name = action_client_manager_node_name + "/_container/load_node";
   const std::string unload_node_service_name = action_client_manager_node_name + "/_container/unload_node";

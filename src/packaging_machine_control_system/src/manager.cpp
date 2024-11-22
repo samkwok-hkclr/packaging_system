@@ -38,6 +38,8 @@ PackagingMachineManager::PackagingMachineManager(
       std::placeholders::_1, 
       std::placeholders::_2));
 
+  unbind_order_id_publisher_ = this->create_publisher<UnbindOrderId>("unbind_order_id", 10); 
+
   load_node_client_ = this->create_client<LoadNode>(
     load_node_service_name,
     rmw_qos_profile_services_default,
@@ -71,17 +73,28 @@ void PackagingMachineManager::status_cb(const PackagingMachineStatus::SharedPtr 
 {
   const std::lock_guard<std::mutex> lock(this->mutex_);
   packaging_machine_status[msg->packaging_machine_id] = *msg;
-  // RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "packaging_machine_status size: %ld", packaging_machine_status.size());
 }
 
 void PackagingMachineManager::packaging_result_cb(const PackagingResult::SharedPtr msg)
 {
   const std::lock_guard<std::mutex> lock(this->mutex_);
+  if (!msg->success)
+  {
+    RCLCPP_ERROR(this->get_logger(), "A packaging order return error.");
+    // TODO: how to handle
+    return;
+  }
 
   auto target = std::find_if(curr_client_.begin(), curr_client_.end(),
     [msg](const std::pair<uint32_t, uint64_t>& entry) {
       return entry.first == msg->order_id;
   });
+
+  UnbindOrderId unbind_msg;
+  unbind_msg.packaging_machine_id = msg->packaging_machine_id;
+  unbind_msg.order_id = msg->order_id;
+  unbind_msg.material_box_id = msg->material_box_id;
+  unbind_order_id_publisher_->publish(unbind_msg);
   
   if (target != curr_client_.end()) 
   {
@@ -224,7 +237,7 @@ void PackagingMachineManager::packaging_order_handle(
     break; 
   default: {
     response->success = false;
-    std::string err_msg = "The Loadnode Service is waited too long.";
+    std::string err_msg = "The Loadnode Service is wait too long.";
     response->message = err_msg;
     RCLCPP_ERROR(this->get_logger(), err_msg.c_str());
     break;

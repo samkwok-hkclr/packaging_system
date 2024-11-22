@@ -17,8 +17,12 @@ PackagingMachineActionClient::PackagingMachineActionClient(const rclcpp::NodeOpt
   this->get_parameter("material_box_id", material_box_id_);
   this->get_parameter("print_info", print_info_);
 
-  std::string action_server =  "/packaging_machine_" + std::to_string(packaging_machine_id_) + "/packaging_order";
+  const std::string action_server = "/packaging_machine_" + std::to_string(packaging_machine_id_) + "/packaging_order";
   
+  packaging_status_ = std::make_shared<PackagingStatus>();
+  packaging_status_->packaging_machine_id = packaging_machine_id_;
+  packaging_status_->order_id = order_id_;
+
   this->client_ptr_ = rclcpp_action::create_client<PackagingOrder>(
     this->get_node_base_interface(),
     this->get_node_graph_interface(),
@@ -26,26 +30,36 @@ PackagingMachineActionClient::PackagingMachineActionClient(const rclcpp::NodeOpt
     this->get_node_waitables_interface(),
     action_server);
 
-  this->timer_ = this->create_wall_timer(
+  packaging_status_timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(500),
+  std::bind(&PackagingMachineActionClient::pub_status_cb, this));
+
+  this->send_goal_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(500),
     std::bind(&PackagingMachineActionClient::send_goal, this));
 
   result_pub_ = this->create_publisher<PackagingResult>("packaging_result", 10);
+  packaging_status_pub_ = this->create_publisher<PackagingStatus>("packaging_status", 10);
 
   RCLCPP_INFO(this->get_logger(), "An Action Client Component is created.");
 }
 
-bool PackagingMachineActionClient::is_goal_done() const
+inline bool PackagingMachineActionClient::is_goal_done(void) const
 {
   return this->goal_done_;
 }
 
-void PackagingMachineActionClient::send_goal()
+void PackagingMachineActionClient::pub_status_cb(void)
+{
+  const std::lock_guard<std::mutex> lock(this->mutex_);
+  packaging_status_pub_->publish(*packaging_status_);
+}
+
+void PackagingMachineActionClient::send_goal(void)
 {
   using namespace std::placeholders;
-  RCLCPP_INFO(this->get_logger(), "Sending goal 1");
 
-  this->timer_->cancel();
+  this->send_goal_timer_->cancel();
 
   this->goal_done_ = false;
 
@@ -53,8 +67,6 @@ void PackagingMachineActionClient::send_goal()
   {
     RCLCPP_ERROR(this->get_logger(), "Action client not initialized");
   }
-  
-  RCLCPP_INFO(this->get_logger(), "Sending goal 2");
 
   if (!this->client_ptr_->wait_for_action_server()) 
   {
@@ -66,16 +78,11 @@ void PackagingMachineActionClient::send_goal()
   RCLCPP_INFO(this->get_logger(), "Sending goal 3");
 
   auto goal_msg = PackagingOrder::Goal();
-  goal_msg.order_id = 101;
-  std::vector<std::string> _print_info(GRIDS);
-  for (size_t i = 0; i < GRIDS; i++)
-  {
-    _print_info[i] = "print me";
-  }
-  goal_msg.print_info = _print_info;
+  goal_msg.order_id = order_id_;
+  goal_msg.material_box_id = material_box_id_;
+  goal_msg.print_info = print_info_;
   RCLCPP_INFO(this->get_logger(), "print_info size: %zu", goal_msg.print_info.size());
   
-
   auto send_goal_options = rclcpp_action::Client<PackagingOrder>::SendGoalOptions();
   send_goal_options.goal_response_callback =
     std::bind(&PackagingMachineActionClient::goal_response_callback, this, _1);
@@ -85,6 +92,7 @@ void PackagingMachineActionClient::send_goal()
     std::bind(&PackagingMachineActionClient::result_callback, this, _1);
 
   auto goal_handle_future = this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
+
   RCLCPP_INFO(this->get_logger(), "Sent goal");
 }
 
@@ -93,6 +101,8 @@ void PackagingMachineActionClient::goal_response_callback(const GaolHandlerPacka
   if (!goal_handle) {
     RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
   } else {
+    const std::lock_guard<std::mutex> lock(this->mutex_);
+    packaging_status_->server_accepted = true;
     RCLCPP_INFO(this->get_logger(), "Goal accepted by server, waiting for result");
   }
 }
@@ -101,13 +111,11 @@ void PackagingMachineActionClient::feedback_callback(
   GaolHandlerPackagingOrder::SharedPtr,
   const std::shared_ptr<const PackagingOrder::Feedback> feedback)
 {
-  (void) feedback;
-  // std::stringstream ss;
-  // ss << "Next number in sequence received: ";
-  // for (auto number : feedback->partial_sequence) {
-  //   ss << number << " ";
-  // }
-  RCLCPP_INFO(this->get_logger(), "feedback");
+  const std::lock_guard<std::mutex> lock(this->mutex_);
+  packaging_status_->are_drugs_fallen = feedback->are_drugs_fallen;
+  packaging_status_->order_status = feedback->curr_order_status;
+
+  RCLCPP_INFO(this->get_logger(), "A feedback received");
 }
 
 void PackagingMachineActionClient::result_callback(const GaolHandlerPackagingOrder::WrappedResult & result)
@@ -127,15 +135,17 @@ void PackagingMachineActionClient::result_callback(const GaolHandlerPackagingOrd
       RCLCPP_ERROR(this->get_logger(), "Unknown result code");
       return;
   }
-  // std::stringstream ss;
-  // ss << "Result received: ";
-  // for (auto number : result.result->sequence) {
-  //   ss << number << " ";
-  // }
+
+  {
+    const std::lock_guard<std::mutex> lock(this->mutex_);
+    packaging_status_->is_completed = true;
+    packaging_status_pub_->publish(*packaging_status_);
+  }
+  
   RCLCPP_INFO(this->get_logger(), "Goal Done");
 
   PackagingResult result_msg;
-  result_msg.success = true;
+  result_msg.success = this->goal_done_;
   result_msg.packaging_machine_id = packaging_machine_id_;
   result_msg.order_id = order_id_;
   result_msg.material_box_id = material_box_id_;

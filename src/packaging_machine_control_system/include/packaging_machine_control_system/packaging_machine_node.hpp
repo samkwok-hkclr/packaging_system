@@ -32,6 +32,7 @@
 #define DAYS 7
 #define CELLS_PER_DAY 4
 #define CELLS 28
+
 #define PKG_PREFIX 4
 
 #define NO_OF_REED_SWITCHS 8
@@ -40,7 +41,6 @@
 
 #define PKG_DIS_RADIUS 18   // in mm unit
 #define PILL_GATE_RADIUS 10 // in mm unit
-
 #define PILL_GATE_WIDTH 44  // in mm unit
 
 #define PULSES_PER_REV 3200
@@ -102,17 +102,8 @@ public:
 
   void rpdo_cb(const COData::SharedPtr msg);
 
-  void init_packaging_machine();
-  void wait_for_idle_motor(const uint8_t & motor_state, const uint8_t waiting_rate);
-
-  rclcpp_action::GoalResponse handle_goal(
-    const rclcpp_action::GoalUUID & uuid, 
-    std::shared_ptr<const PackagingOrder::Goal> goal);
-  rclcpp_action::CancelResponse handle_cancel(
-    const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
-  void handle_accepted(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
-
-  void order_execute(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
+  void init_packaging_machine(void);
+  void wait_for_idle_motor(const uint8_t & motor_state, const uint16_t waiting_rate);
 
 private:
   std::mutex mutex_;
@@ -131,7 +122,6 @@ private:
   rclcpp::TimerBase::SharedPtr status_timer_;
   rclcpp::Publisher<PackagingMachineStatus>::SharedPtr status_publisher_;
   rclcpp::Publisher<MotorStatus>::SharedPtr motor_status_publisher_;
-  rclcpp::Publisher<UnbindRequest>::SharedPtr unbind_req_publisher_;
 
   rclcpp::Publisher<COData>::SharedPtr tpdo_pub_;
   rclcpp::Subscription<COData>::SharedPtr rpdo_sub_;
@@ -144,6 +134,15 @@ private:
   rclcpp::Client<COWrite>::SharedPtr co_write_client_;
 
   rclcpp_action::Server<PackagingOrder>::SharedPtr action_server_;
+
+  rclcpp_action::GoalResponse handle_goal(
+    const rclcpp_action::GoalUUID & uuid, 
+    std::shared_ptr<const PackagingOrder::Goal> goal);
+  rclcpp_action::CancelResponse handle_cancel(
+    const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
+  void handle_accepted(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
+
+  void order_execute(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
 
 }; // class PackagingMachineNode
 

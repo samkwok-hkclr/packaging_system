@@ -38,7 +38,6 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
   this->get_parameter("offset_x", printer_config_->offset_x);
   this->get_parameter("offset_y", printer_config_->offset_y);
 
-  RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Printer is up.");
   status_->header.frame_id = "Packaging Machine";
   status_->packaging_machine_state = PackagingMachineStatus::IDLE;
 
@@ -50,12 +49,9 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
   rpdo_options.callback_group = rpdo_cbg_;
 
   status_timer_ = this->create_wall_timer(1s, std::bind(&PackagingMachineNode::pub_status_cb, this));
-
   // add a "/" prefix to topic name avoid adding a namespace
   status_publisher_ = this->create_publisher<PackagingMachineStatus>("/machine_status", 10); 
-
   motor_status_publisher_ = this->create_publisher<MotorStatus>("motor_status", 10); 
-  unbind_req_publisher_ = this->create_publisher<UnbindRequest>("unbind_request", 10); 
 
   tpdo_pub_ = this->create_publisher<COData>(
     "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/tpdo", 
@@ -74,7 +70,7 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
     "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/CO_Write",
     rmw_qos_profile_services_default,
     srv_cli_cbg_);
-
+    
   heater_service_ = this->create_service<SetBool>(
     "heater_operation", 
     std::bind(&PackagingMachineNode::heater_handle, 
@@ -119,18 +115,17 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "The CO Service client is up.");
   }
 
-  auto cmd = get_print_label_cmd("testing", 0, 0);
   for (int i = 0; i < 3; i++)
   {
     printer_ = std::make_shared<Printer>(
-    printer_config_->vendor_id, 
-    printer_config_->product_id, 
-    printer_config_->serial);
+      printer_config_->vendor_id, 
+      printer_config_->product_id, 
+      printer_config_->serial);
     init_printer_config();
+    auto cmd = get_print_label_cmd("testing", 0, 0);
     printer_->runTask(cmd);
-    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "runTask");
     std::this_thread::sleep_for(3s);
-    printer_.reset();;
+    printer_.reset();
   }
 }
 
@@ -140,7 +135,6 @@ void PackagingMachineNode::pub_status_cb(void)
   status_->header.stamp = this->get_clock()->now();
   status_publisher_->publish(*status_);
 }
-
 
 bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uint32_t _data)
 {
@@ -253,18 +247,16 @@ void PackagingMachineNode::rpdo_cb(const COData::SharedPtr msg)
   }
 }
 
-void PackagingMachineNode::init_packaging_machine()
+void PackagingMachineNode::init_packaging_machine(void)
 {
   ctrl_heater(1);
   ctrl_stopper(0);
   status_->conveyor_state = PackagingMachineStatus::AVAILABLE;
-
-  // if ()
 }
 
 void PackagingMachineNode::wait_for_idle_motor(
   const uint8_t & motor_state, 
-  const uint8_t waiting_rate)
+  const uint16_t waiting_rate)
 {
   rclcpp::Rate rate(waiting_rate);
   while (rclcpp::ok())
@@ -414,7 +406,7 @@ bool PackagingMachineNode::ctrl_roller(
     result &= call_co_write(0x6030, 0x0, 1);
     result &= call_co_write(0x6037, 0x0, 1); // set mode 1 to go home
   }  else {
-    result &= call_co_write(0x6030, 0x0, days > 7 ? 7 : days);
+    result &= call_co_write(0x6030, 0x0, days > DAYS ? DAYS : days);
     result &= call_co_write(0x6037, 0x0, 0); // set mode 0 to go X day(s)
   }
 
@@ -478,31 +470,42 @@ bool PackagingMachineNode::ctrl_pkg_len(
 void PackagingMachineNode::init_printer_config()
 {
   printer_->configure(printer_config_->endpoint_in, printer_config_->endpoint_out, printer_config_->timeout);
+  // printer_->addDefaultConfig("SIZE", "75 mm,80 mm");
+  // printer_->addDefaultConfig("DIRECTION", "0, 0");
+  // printer_->addDefaultConfig("GAP", "2 mm");
+  // printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
+  // printer_->addDefaultConfig("DENSITY", "2");
+  // printer_->addDefaultConfig("SPEED", "1");
+  // // printer_->addDefaultConfig("OFFSET", "4 mm");
+  // printer_->addDefaultConfig("CLS");
+
   printer_->addDefaultConfig("SIZE", "75 mm,80 mm");
-  printer_->addDefaultConfig("DIRECTION", "0, 0");
-  printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
-  printer_->addDefaultConfig("DENSITY", "2");
-  printer_->addDefaultConfig("SPEED", "1");
-  // printer_->addDefaultConfig("OFFSET", "4 mm");
+  printer_->addDefaultConfig("GAP", "25 mm");
+  printer_->addDefaultConfig("SPEED", "3");
+  printer_->addDefaultConfig("DENSITY", "8");
   printer_->addDefaultConfig("CLS");
 }
+
 
 // TODO
 // std::vector<std::string> PackagingMachineNode::get_print_label_cmd()
 std::vector<std::string> PackagingMachineNode::get_print_label_cmd(std::string name, int total, int current)
 {
+  (void)name;
+  (void)total;
+  (void)current;
   std::vector<std::string> cmds{};
 
   // auto num = generateRandomNumber(1000000000000000, 9999999999999999);
-  auto num = 67642550;
+  // auto num = 67642550;
   // auto timeslot = time_slot[current % time_slot.size()];
 
-  cmds.emplace_back(
-      R"(TEXT )" + std::to_string(0) + "," + std::to_string(50) + R"(,"4",0,1,1,")" + name + R"(")"
-  );
-  cmds.emplace_back(
-      R"(BARCODE )" + std::to_string(350 + 0) + "," + std::to_string(100 + 0) + R"(,"128",128,1,0,2,4,")" + std::to_string(num) + R"(")"
-  );
+  // cmds.emplace_back(
+  //     R"(TEXT )" + std::to_string(0) + "," + std::to_string(50) + R"(,"4",0,1,1,")" + name + R"(")"
+  // );
+  // cmds.emplace_back(
+  //     R"(BARCODE )" + std::to_string(350 + 0) + "," + std::to_string(100 + 0) + R"(,"128",128,1,0,2,4,")" + std::to_string(num) + R"(")"
+  // );
   // cmds.emplace_back(
   //     R"(TEXT )" + std::to_string(50 + offset_x) + "," + std::to_string(110 + offset_y) + R"(,"3",0,1,1,"No. )" + std::to_string(1 + current) + R"(")"
   // );
@@ -515,12 +518,19 @@ std::vector<std::string> PackagingMachineNode::get_print_label_cmd(std::string n
   // cmds.emplace_back(
   //     R"(TEXT )" + std::to_string(0 + offset_x) + "," + std::to_string(300 + offset_y) + R"(,"3",0,1,1,")" + "MIRACID 20 mg capsule" + R"(")"
   // );
-  cmds.emplace_back(
-      R"(QRCODE )" + std::to_string(450 + 0) + "," + std::to_string(280 + 0) + R"(,L,5,A,0,")" + "SAM" + R"(")"
-  );
+  // cmds.emplace_back(
+  //     R"(QRCODE )" + std::to_string(450 + 0) + "," + std::to_string(280 + 0) + R"(,L,5,A,0,")" + "SAM" + R"(")"
+  // );
   // cmds.emplace_back(
   //     R"(TEXT )" + std::to_string(50 + offset_x) + "," + std::to_string(450 + offset_y) + R"(,"4",0,1,1,")" + std::to_string(1 + current) + "/" + std::to_string(total) + R"(")"
   // );
+
+  cmds.emplace_back("TEXT 10 mm,15 mm,\"TST24.BF2\",0,1,1,\"名\"");
+  cmds.emplace_back("TEXT 36 mm,15 mm,\"3\",0,1,1,\"name\"");
+  cmds.emplace_back("TEXT 10 mm,19 mm,\"3\",0,1,1,\"2024-11-22\"");
+  cmds.emplace_back("TEXT 36 mm,15 mm,\"3\",0,1,1,\"06:00 AM\"");
+  cmds.emplace_back("QRCODE 50 mm,16 mm,L,5,A,0,\"www.hkclr.hk\"");
+  cmds.emplace_back("TEXT 10 mm,34 mm,\"TST24.BF2\",0,1,1,\"六味地黄丸1粒\"");
   cmds.emplace_back("PRINT 1");
 
   return cmds;
@@ -532,6 +542,12 @@ rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
 {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(), "print_info size: %lu", goal->print_info.size());
+
+  printer_ = std::make_shared<Printer>(
+    printer_config_->vendor_id, 
+    printer_config_->product_id, 
+    printer_config_->serial);
+  init_printer_config();
 
   // Assume the print_info size MUST be 28
   {
@@ -607,12 +623,6 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
     status_->conveyor_state = PackagingMachineStatus::AVAILABLE;
   }
 
-  UnbindRequest msg;
-  msg.packaging_machine_id = status_->packaging_machine_id;
-  msg.order_id = goal->order_id;
-  msg.material_box_id = goal->material_box_id;
-  unbind_req_publisher_->publish(msg);
-
   // TODO: packaging sequence 2
   uint8_t day = 0;
   uint8_t cell_index = 0;
@@ -632,8 +642,14 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
     if (to_be_print.at(print_index))
     {
       // print to_be_print.at(print_index)
+      auto cmd = get_print_label_cmd("testing", 0, 0);
+      printer_->runTask(cmd);
+      std::this_thread::sleep_for(3s);
     } else {
       // print empty
+      auto cmd = get_print_label_cmd("testing", 0, 0);
+      printer_->runTask(cmd);
+      std::this_thread::sleep_for(3s);
     }
     ctrl_pkg_dis(status_->package_length, 1, 1);
     wait_for_idle_motor(motor_status_->pkg_dis_state, 200);
@@ -660,8 +676,14 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
         if (to_be_print.at(print_index))
         {
           // print to_be_print.at(print_index)
+          auto cmd = get_print_label_cmd("testing", 0, 0);
+          printer_->runTask(cmd);
+          std::this_thread::sleep_for(3s);
         } else {
           // print empty
+          auto cmd = get_print_label_cmd("testing", 0, 0);
+          printer_->runTask(cmd);
+          std::this_thread::sleep_for(3s);
         }
         ctrl_pkg_dis(status_->package_length, 1, 1);
         wait_for_idle_motor(motor_status_->pkg_dis_state, 200);
@@ -684,6 +706,9 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
   for (uint8_t i = 0; i < PKG_PREFIX; i++)
   {
     // print empty
+    auto cmd = get_print_label_cmd("testing", 0, 0);
+    printer_->runTask(cmd);
+    std::this_thread::sleep_for(3s);
   }
 
   ctrl_cutter(1);
@@ -692,6 +717,7 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
 
   // Check if goal is done
   if (rclcpp::ok()) {
+    printer_.reset();
     result->order_result = curr_order_status;
     goal_handle->succeed(result);
     {
