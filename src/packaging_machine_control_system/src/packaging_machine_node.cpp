@@ -115,7 +115,7 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "The CO Service client is up.");
   }
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 1; i++)
   {
     printer_ = std::make_shared<Printer>(
       printer_config_->vendor_id, 
@@ -470,19 +470,13 @@ bool PackagingMachineNode::ctrl_pkg_len(
 void PackagingMachineNode::init_printer_config()
 {
   printer_->configure(printer_config_->endpoint_in, printer_config_->endpoint_out, printer_config_->timeout);
-  // printer_->addDefaultConfig("SIZE", "75 mm,80 mm");
-  // printer_->addDefaultConfig("DIRECTION", "0, 0");
-  // printer_->addDefaultConfig("GAP", "2 mm");
-  // printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
-  // printer_->addDefaultConfig("DENSITY", "2");
-  // printer_->addDefaultConfig("SPEED", "1");
-  // // printer_->addDefaultConfig("OFFSET", "4 mm");
-  // printer_->addDefaultConfig("CLS");
-
   printer_->addDefaultConfig("SIZE", "75 mm,80 mm");
-  printer_->addDefaultConfig("GAP", "25 mm");
-  printer_->addDefaultConfig("SPEED", "3");
-  printer_->addDefaultConfig("DENSITY", "8");
+  printer_->addDefaultConfig("DIRECTION", "0, 0");
+  printer_->addDefaultConfig("GAP", "2 mm");
+  printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
+  printer_->addDefaultConfig("DENSITY", "2");
+  printer_->addDefaultConfig("SPEED", "1");
+  // printer_->addDefaultConfig("OFFSET", "4 mm");
   printer_->addDefaultConfig("CLS");
 }
 
@@ -497,15 +491,15 @@ std::vector<std::string> PackagingMachineNode::get_print_label_cmd(std::string n
   std::vector<std::string> cmds{};
 
   // auto num = generateRandomNumber(1000000000000000, 9999999999999999);
-  // auto num = 67642550;
+  auto num = 67642550;
   // auto timeslot = time_slot[current % time_slot.size()];
 
-  // cmds.emplace_back(
-  //     R"(TEXT )" + std::to_string(0) + "," + std::to_string(50) + R"(,"4",0,1,1,")" + name + R"(")"
-  // );
-  // cmds.emplace_back(
-  //     R"(BARCODE )" + std::to_string(350 + 0) + "," + std::to_string(100 + 0) + R"(,"128",128,1,0,2,4,")" + std::to_string(num) + R"(")"
-  // );
+  cmds.emplace_back(
+      R"(TEXT )" + std::to_string(0) + "," + std::to_string(50) + R"(,"4",0,1,1,")" + name + R"(")"
+  );
+  cmds.emplace_back(
+      R"(BARCODE )" + std::to_string(350 + 0) + "," + std::to_string(100 + 0) + R"(,"128",128,1,0,2,4,")" + std::to_string(num) + R"(")"
+  );
   // cmds.emplace_back(
   //     R"(TEXT )" + std::to_string(50 + offset_x) + "," + std::to_string(110 + offset_y) + R"(,"3",0,1,1,"No. )" + std::to_string(1 + current) + R"(")"
   // );
@@ -524,13 +518,6 @@ std::vector<std::string> PackagingMachineNode::get_print_label_cmd(std::string n
   // cmds.emplace_back(
   //     R"(TEXT )" + std::to_string(50 + offset_x) + "," + std::to_string(450 + offset_y) + R"(,"4",0,1,1,")" + std::to_string(1 + current) + "/" + std::to_string(total) + R"(")"
   // );
-
-  cmds.emplace_back("TEXT 10 mm,15 mm,\"TST24.BF2\",0,1,1,\"名\"");
-  cmds.emplace_back("TEXT 36 mm,15 mm,\"3\",0,1,1,\"name\"");
-  cmds.emplace_back("TEXT 10 mm,19 mm,\"3\",0,1,1,\"2024-11-22\"");
-  cmds.emplace_back("TEXT 36 mm,15 mm,\"3\",0,1,1,\"06:00 AM\"");
-  cmds.emplace_back("QRCODE 50 mm,16 mm,L,5,A,0,\"www.hkclr.hk\"");
-  cmds.emplace_back("TEXT 10 mm,34 mm,\"TST24.BF2\",0,1,1,\"六味地黄丸1粒\"");
   cmds.emplace_back("PRINT 1");
 
   return cmds;
