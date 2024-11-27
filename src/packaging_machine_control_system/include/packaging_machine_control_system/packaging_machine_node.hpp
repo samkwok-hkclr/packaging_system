@@ -19,6 +19,7 @@
 #include "smdps_msgs/action/packaging_order.hpp"
 #include "smdps_msgs/msg/packaging_machine_status.hpp"
 #include "smdps_msgs/msg/packaging_machine_info.hpp"
+#include "smdps_msgs/msg/package_info.hpp"
 #include "smdps_msgs/msg/motor_status.hpp"
 #include "smdps_msgs/msg/unbind_request.hpp"
 
@@ -45,6 +46,8 @@
 
 #define PULSES_PER_REV 3200
 
+#define CONVEYOR_SPEED 300
+
 using namespace std::chrono_literals;
 
 class PackagingMachineNode : public rclcpp::Node
@@ -54,6 +57,7 @@ public:
 
   using PackagingMachineStatus = smdps_msgs::msg::PackagingMachineStatus;
   using PackagingMachineInfo = smdps_msgs::msg::PackagingMachineInfo;
+  using PackageInfo = smdps_msgs::msg::PackageInfo;
   using MotorStatus = smdps_msgs::msg::MotorStatus;
   using UnbindRequest = smdps_msgs::msg::UnbindRequest;
   using PackagingOrder = smdps_msgs::action::PackagingOrder;
@@ -72,35 +76,53 @@ public:
   bool call_co_write(uint16_t _index, uint8_t _subindex, uint32_t _data);
   bool call_co_read(uint16_t _index, uint8_t _subindex, std::shared_ptr<uint32_t> _data);
 
-  void heater_handle(
-    const std::shared_ptr<SetBool::Request> request, 
-    std::shared_ptr<SetBool::Response> response);
-  void stopper_handle(
-    const std::shared_ptr<SetBool::Request> request, 
-    std::shared_ptr<SetBool::Response> response);
-  void conveyor_handle(
-    const std::shared_ptr<SetBool::Request> request, 
-    std::shared_ptr<SetBool::Response> response);
-  
-  // packaging machine operation
   bool ctrl_heater(const bool on); 
+  bool write_heater(const uint32_t data); 
+  bool read_heater(std::shared_ptr<uint32_t> data); 
 
   bool ctrl_stopper(const bool protrude); 
+  bool write_stopper(const uint32_t data); 
+  bool read_stopper(std::shared_ptr<uint32_t> data);
+  
   bool ctrl_material_box_gate(const bool open); 
+  bool write_material_box_gate(const uint32_t data); 
+  bool read_material_box_gate(std::shared_ptr<uint32_t> data); 
+
   bool ctrl_cutter(const bool cut);
+  bool write_cutter(const uint32_t data);
+  bool read_cutter(std::shared_ptr<uint32_t> data);
 
   bool ctrl_pkg_dis(const float length, const bool feed, const bool ctrl);
-  bool ctrl_pill_gate(const float length, const bool open, const bool ctrl);
-  bool ctrl_squeezer(const bool squeeze, const bool ctrl);
-  bool ctrl_roller(const uint8_t days, const bool home, const bool ctrl);
-  bool ctrl_conveyor(const uint16_t speed, const bool stop_by_ph, const bool fwd, const bool ctrl);
-  bool ctrl_pkg_len(const uint8_t level, const bool ctrl);
+  bool read_pkg_dis_state(std::shared_ptr<uint32_t> data);
 
-// std::vector<std::string> get_print_label_cmd();
+  bool ctrl_pill_gate(const float length, const bool open, const bool ctrl);
+  bool read_pill_gate_state(std::shared_ptr<uint32_t> data);
+  
+  bool ctrl_squeezer(const bool squeeze, const bool ctrl);
+  bool read_squeezer_state(std::shared_ptr<uint32_t> data);
+
+  bool ctrl_conveyor(const uint16_t speed, const bool stop_by_ph, const bool fwd, const bool ctrl);
+  bool read_conveyor_state(std::shared_ptr<uint32_t> data);
+
+  bool ctrl_roller(const uint8_t days, const bool home, const bool ctrl);
+  bool read_roller_state(std::shared_ptr<uint32_t> data);
+  
+  bool ctrl_pkg_len(const uint8_t level, const bool ctrl);
+  bool read_pkg_len_state(std::shared_ptr<uint32_t> data);
+
+  void wait_for_stopper(const uint32_t stop_condition);
+  void wait_for_material_box_gate(const uint32_t stop_condition);
+  void wait_for_cutter(const uint32_t stop_condition);
+  void wait_for_pkg_dis_idle();
+  void wait_for_pill_gate_idle();
+  void wait_for_squeezer_idle();
+  void wait_for_conveyor_idle();
+  void wait_for_roller_idle();
+  void wait_for_pkg_len_idle();
+
   void init_printer_config();
   std::vector<std::string> get_print_label_cmd(std::string name, int total, int current);
-
-  void rpdo_cb(const COData::SharedPtr msg);
+  std::vector<std::string> get_print_label_cmd(std::shared_ptr<PackageInfo> msg);
 
   void init_packaging_machine(void);
   void wait_for_idle_motor(const uint8_t & motor_state, const uint16_t waiting_rate);
@@ -117,6 +139,7 @@ private:
   std::shared_ptr<PackagingMachineInfo> info_;
 
   rclcpp::CallbackGroup::SharedPtr srv_cli_cbg_;
+  rclcpp::CallbackGroup::SharedPtr action_ser_cbg_;
   rclcpp::CallbackGroup::SharedPtr rpdo_cbg_;
 
   rclcpp::TimerBase::SharedPtr status_timer_;
@@ -143,6 +166,18 @@ private:
   void handle_accepted(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
 
   void order_execute(const std::shared_ptr<GaolHandlerPackagingOrder> goal_handle);
+
+  void heater_handle(
+    const std::shared_ptr<SetBool::Request> request, 
+    std::shared_ptr<SetBool::Response> response);
+  void stopper_handle(
+    const std::shared_ptr<SetBool::Request> request, 
+    std::shared_ptr<SetBool::Response> response);
+  void conveyor_handle(
+    const std::shared_ptr<SetBool::Request> request, 
+    std::shared_ptr<SetBool::Response> response);
+
+  void rpdo_cb(const COData::SharedPtr msg);
 
 }; // class PackagingMachineNode
 

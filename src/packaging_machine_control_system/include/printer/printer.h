@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include <iconv.h>
+
 class libusbxx;
 
 class Printer {
@@ -31,6 +33,8 @@ public:
   bool updateDefaultConfig(const std::string &name, const std::string &config);
 
   void runTask(const std::vector<std::string> &);
+
+  std::string convert_utf8_to_gbk(const std::string &utf8_string);
 
 private:
   std::unique_ptr<libusbxx> usb_;

@@ -13,6 +13,7 @@
 
 #include "smdps_msgs/msg/packaging_status.hpp"
 #include "smdps_msgs/msg/packaging_result.hpp"
+#include "smdps_msgs/msg/package_info.hpp"
 #include "smdps_msgs/action/packaging_order.hpp"
 
 #define CELLS 28
@@ -26,6 +27,7 @@ class PackagingMachineActionClient : public rclcpp::Node
 {
   using PackagingStatus = smdps_msgs::msg::PackagingStatus;
   using PackagingResult = smdps_msgs::msg::PackagingResult;
+  using PackageInfo = smdps_msgs::msg::PackageInfo;
   using PackagingOrder = smdps_msgs::action::PackagingOrder;
   using GaolHandlerPackagingOrder = rclcpp_action::ClientGoalHandle<PackagingOrder>; 
 
@@ -35,14 +37,13 @@ public:
   inline bool is_goal_done(void) const;
   void send_goal(void);
 
-  
 private:
   std::mutex mutex_;
 
   uint8_t packaging_machine_id_;
   uint32_t order_id_;
   uint32_t material_box_id_;
-  std::vector<std::string> print_info_;
+  std::array<PackageInfo, CELLS> print_info_;
 
   std::shared_ptr<PackagingStatus> packaging_status_;
 

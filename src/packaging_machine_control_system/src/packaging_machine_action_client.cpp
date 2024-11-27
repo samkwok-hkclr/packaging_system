@@ -6,16 +6,63 @@ namespace action_client
 PackagingMachineActionClient::PackagingMachineActionClient(const rclcpp::NodeOptions & options)
 : Node("action_client", options),
   goal_done_(false)
+  // print_info_(CELLS)
 {
   this->declare_parameter<std::uint8_t>("packaging_machine_id", 0);
   this->declare_parameter<std::int64_t>("order_id", 0);
   this->declare_parameter<std::int64_t>("material_box_id", 0);
-  this->declare_parameter<std::vector<std::string>>("print_info", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("cn_name", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("en_name", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("date", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("time", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("drugs", std::vector<std::string>{});
+
+  std::vector<std::string> _cn_name;
+  std::vector<std::string> _en_name;
+  std::vector<std::string> _date;
+  std::vector<std::string> _time;
+  std::vector<std::string> _drugs;
 
   this->get_parameter("packaging_machine_id", packaging_machine_id_);
   this->get_parameter("order_id", order_id_);
   this->get_parameter("material_box_id", material_box_id_);
-  this->get_parameter("print_info", print_info_);
+  this->get_parameter("cn_name", _cn_name);
+  this->get_parameter("en_name", _en_name);
+  this->get_parameter("date", _date);
+  this->get_parameter("time", _time);
+  this->get_parameter("drugs", _drugs);
+
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    print_info_[i].cn_name = _cn_name[i];
+    print_info_[i].en_name = _en_name[i];
+    print_info_[i].date = _date[i];
+    print_info_[i].time = _time[i];
+    auto split_string = [](const std::string& s, char delimiter) {
+      std::vector<std::string> result;
+      std::stringstream ss(s);
+      std::string item;
+
+      while (std::getline(ss, item, delimiter)) {
+        result.push_back(item);
+      }
+
+      return result;
+    };
+    print_info_[i].drugs = split_string(_drugs[i], '#');
+  }
+
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    RCLCPP_DEBUG(this->get_logger(), print_info_[i].cn_name.c_str());
+    RCLCPP_DEBUG(this->get_logger(), print_info_[i].en_name.c_str());
+    RCLCPP_DEBUG(this->get_logger(), print_info_[i].date.c_str());
+    RCLCPP_DEBUG(this->get_logger(), print_info_[i].time.c_str());
+    for (size_t j = 0; j < print_info_[i].drugs.size(); j++)
+    {
+      RCLCPP_DEBUG(this->get_logger(), print_info_[i].drugs[j].c_str());
+    }
+  }
 
   const std::string action_server = "/packaging_machine_" + std::to_string(packaging_machine_id_) + "/packaging_order";
   
@@ -80,7 +127,8 @@ void PackagingMachineActionClient::send_goal(void)
   auto goal_msg = PackagingOrder::Goal();
   goal_msg.order_id = order_id_;
   goal_msg.material_box_id = material_box_id_;
-  goal_msg.print_info = print_info_;
+  std::copy(print_info_.begin(), print_info_.end(), goal_msg.print_info.begin()); 
+
   RCLCPP_INFO(this->get_logger(), "print_info size: %zu", goal_msg.print_info.size());
   
   auto send_goal_options = rclcpp_action::Client<PackagingOrder>::SendGoalOptions();
