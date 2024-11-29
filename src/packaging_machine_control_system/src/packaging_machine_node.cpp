@@ -1201,9 +1201,9 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
   {
     if (print_index < to_be_printed.size() && to_be_printed.at(print_index))
     {
-      std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index++]);
+      std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
       printer_->runTask(cmd);
-      RCLCPP_INFO(this->get_logger(), "printed a order package");
+      RCLCPP_INFO(this->get_logger(), "printed a order %ld package", cell_index);
     } else {
       PackageInfo __msg;
       std::vector<std::string> cmd = get_print_label_cmd(__msg);
@@ -1221,6 +1221,8 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
 
     ctrl_squeezer(0, 1);
     wait_for_squeezer(MotorStatus::IDLE);
+
+    cell_index++;
     RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> print_index: %ld <<<<<<<<<<", print_index);
   }
 
@@ -1249,7 +1251,7 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
         {
           std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
           printer_->runTask(cmd);
-          RCLCPP_INFO(this->get_logger(), "printed a order package");
+          RCLCPP_INFO(this->get_logger(), "printed a order %ld package", cell_index);
         } else {
           PackageInfo __msg;
           std::vector<std::string> cmd = get_print_label_cmd(__msg);
