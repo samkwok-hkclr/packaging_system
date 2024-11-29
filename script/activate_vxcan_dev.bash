@@ -7,7 +7,7 @@ PHY_CAN_INTERFACE=can0
 VIR_CAN_TUNNEL_0=vxcan0
 VIR_CAN_TUNNEL_1=vxcan1
 
-CONTAINER_NAME=packaging_machine_comm
+CONTAINER_NAME=ros2_humble_dev_2
 WS_NAME=packaging_system
 
 ROS_DISTRO=humble
@@ -39,7 +39,7 @@ echo "Mapped $VIR_CAN_TUNNEL_0 to $VIR_CAN_TUNNEL_1"
 
 docker exec $CONTAINER_NAME /bin/bash -c "\
     source /opt/ros/$ROS_DISTRO/setup.bash; \
-    source /$WS_NAME/install/setup.bash; \
+    source ~/$WS_NAME/install/setup.bash; \
     ros2 lifecycle set /lifecycle_manager configure; \
     sleep 3; \
     ros2 lifecycle set /lifecycle_manager activate"

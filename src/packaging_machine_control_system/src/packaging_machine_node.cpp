@@ -48,7 +48,7 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
 
   srv_cli_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   action_ser_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-  rpdo_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  rpdo_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   rclcpp::SubscriptionOptions rpdo_options;
   rpdo_options.callback_group = rpdo_cbg_;
   // rclcpp_action::Options action_ser_options;
@@ -76,6 +76,13 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
     "/packaging_machine_" + std::to_string(status_->packaging_machine_id) + "/sdo_write",
     rmw_qos_profile_services_default,
     srv_cli_cbg_);
+
+  init_package_machine_ = this->create_service<Trigger>(
+    "init_package_machine", 
+    std::bind(&PackagingMachineNode::init_handle, 
+      this, 
+      std::placeholders::_1, 
+      std::placeholders::_2));
     
   heater_service_ = this->create_service<SetBool>(
     "heater_operation", 
@@ -109,39 +116,18 @@ PackagingMachineNode::PackagingMachineNode(const rclcpp::NodeOptions& options)
 
   if (sim_ == false)
   {
-    while (!co_read_client_->wait_for_service(std::chrono::seconds(1))) 
-    {
-      RCLCPP_ERROR(this->get_logger(), "CO_Read Service not available!");
-    }
-    while (!co_write_client_->wait_for_service(std::chrono::seconds(1))) 
-    {
-      RCLCPP_ERROR(this->get_logger(), "CO_Write Service not available!");
-    }
+    co_read_wait_for_service();
+    co_write_wait_for_service();
 
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "The CO Service client is up.");
-
-    init_packaging_machine();
   }
-
-  // for (int i = 0; i < 1; i++)
-  // {
-  //   printer_ = std::make_shared<Printer>(
-  //     printer_config_->vendor_id, 
-  //     printer_config_->product_id, 
-  //     printer_config_->serial);
-  //   init_printer_config();
-  //   auto cmd = get_print_label_cmd("testing", 0, 0);
-  //   printer_->runTask(cmd);
-  //   std::this_thread::sleep_for(3s);
-  //   printer_.reset();
-  // }
 }
 
 void PackagingMachineNode::init_packaging_machine(void)
 {
   RCLCPP_INFO(this->get_logger(), "init_packaging_machine start");
   ctrl_heater(1);
-  std::this_thread::sleep_for(500ms);
+  std::this_thread::sleep_for(200ms);
 
   ctrl_stopper(1);
   wait_for_stopper(0);
@@ -157,44 +143,68 @@ void PackagingMachineNode::init_packaging_machine(void)
   ctrl_material_box_gate(0);
   wait_for_material_box_gate(0);
 
-  ctrl_pkg_dis(status_->package_length, 1, 1);
-  wait_for_pkg_dis_idle();
-
-  ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
-  wait_for_pill_gate_idle();
-
   std::this_thread::sleep_for(500ms);
 
   ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
-  wait_for_pill_gate_idle();
+  wait_for_pill_gate(MotorStatus::IDLE);
 
-  std::this_thread::sleep_for(500ms);
+  std::this_thread::sleep_for(250ms);
 
-  ctrl_pill_gate(PILL_GATE_WIDTH * 4 * 1.05, 0, 1);
-  wait_for_pill_gate_idle();
+  ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
+  wait_for_pill_gate(MotorStatus::IDLE);
 
-  ctrl_squeezer(1, 1);
-  wait_for_squeezer_idle();
+  std::this_thread::sleep_for(250ms);
 
-  std::this_thread::sleep_for(500ms);
+  ctrl_pill_gate(PILL_GATE_WIDTH * 4 * PILL_GATE_CLOSE_MARGIN, 0, 1);
+  wait_for_pill_gate(MotorStatus::IDLE);
 
-  ctrl_squeezer(0, 1);
-  wait_for_squeezer_idle();
+  std::this_thread::sleep_for(250ms);
 
-  std::this_thread::sleep_for(500ms);
+  printer_ = std::make_shared<Printer>(
+    printer_config_->vendor_id, 
+    printer_config_->product_id, 
+    printer_config_->serial);
+  RCLCPP_INFO(this->get_logger(), "printer initialized");
+
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    PackageInfo __msg;
+    __msg.cn_name = "TESTING";
+    __msg.en_name = "TESTING";
+    __msg.date = "2024-11-11";
+    __msg.time = "13:00";
+    __msg.drugs.push_back("DRUG 1");
+    auto cmd = get_print_label_cmd(__msg);
+    printer_->runTask(cmd);
+    RCLCPP_INFO(this->get_logger(), "printed a empty package");
+
+    std::this_thread::sleep_for(1s);
+    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    wait_for_pkg_dis(MotorStatus::IDLE);
+
+    ctrl_squeezer(1, 1);
+    wait_for_squeezer(MotorStatus::IDLE);
+
+    std::this_thread::sleep_for(400ms);
+
+    ctrl_squeezer(0, 1);
+    wait_for_squeezer(MotorStatus::IDLE);
+  }
+
+  printer_.reset();
+  RCLCPP_INFO(this->get_logger(), "printer destroyed");
 
   ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 1);
   std::this_thread::sleep_for(2s);
-  ctrl_conveyor(0, 0, 1, 0);
+  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 0);
 
   ctrl_roller(0, 1, 1);
-  wait_for_roller_idle();
-  
-  std::this_thread::sleep_for(1s);
-  RCLCPP_INFO(this->get_logger(), "init_packaging_machine end");
+  wait_for_roller(MotorStatus::IDLE);
 
   const std::lock_guard<std::mutex> lock(this->mutex_);
   status_->conveyor_state = PackagingMachineStatus::AVAILABLE;
+
+  RCLCPP_INFO(this->get_logger(), "init_packaging_machine end");
 }
 
 void PackagingMachineNode::pub_status_cb(void)
@@ -205,23 +215,116 @@ void PackagingMachineNode::pub_status_cb(void)
   motor_status_publisher_->publish(*motor_status_);
 }
 
-bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uint32_t _data)
+inline void PackagingMachineNode::co_write_wait_for_service(void)
 {
-  std::shared_ptr<COWrite::Request> request = std::make_shared<COWrite::Request>();
-
-  request->index = _index;
-  request->subindex = _subindex;
-  request->data = _data;
-
   while (!co_write_client_->wait_for_service(std::chrono::seconds(1)))
   {
     if (!rclcpp::ok())
     {
       RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting");
-      return false;
+      rclcpp::shutdown();
     }
-    RCLCPP_INFO(this->get_logger(), "COWrite Service not available, waiting again...");
+    RCLCPP_ERROR(this->get_logger(), "COWrite Service not available, waiting again...");
   }
+}
+
+inline void PackagingMachineNode::co_read_wait_for_service(void)
+{
+  while (!co_read_client_->wait_for_service(std::chrono::seconds(1)))
+  {
+    if (!rclcpp::ok())
+    {
+      RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting");
+      rclcpp::shutdown();
+    }
+    RCLCPP_ERROR(this->get_logger(), "CORead Service not available, waiting again...");
+  }
+}
+
+bool PackagingMachineNode::call_co_write(uint16_t index, uint8_t subindex, uint32_t data)
+{
+  std::shared_ptr<COWrite::Request> request = std::make_shared<COWrite::Request>();
+
+  request->index = index;
+  request->subindex = subindex;
+  request->data = data;
+
+  co_write_wait_for_service();
+
+  using ServiceResponseFuture = rclcpp::Client<COWrite>::SharedFuture;
+  auto response_received_cb = [this](ServiceResponseFuture future) {
+    auto srv_response = future.get();
+    if (srv_response) 
+      RCLCPP_DEBUG(this->get_logger(), "Inside the COWrite Callback OK");
+    else 
+      RCLCPP_ERROR(this->get_logger(), "Inside the COWrite Callback NOT OK");
+  };
+
+  auto future = co_write_client_->async_send_request(request, response_received_cb);
+
+  std::future_status status = future.wait_for(500ms);
+  switch (status)
+  {
+  case std::future_status::ready:
+    RCLCPP_DEBUG(this->get_logger(), "call_co_write wait_for OK");
+    return true; 
+  case std::future_status::timeout:
+    RCLCPP_ERROR(this->get_logger(), "call_co_write wait_for timeout");
+    return false;
+  default: 
+    RCLCPP_ERROR(this->get_logger(), "call_co_write wait_for NOT OK");
+    return false;
+  }
+}
+
+bool PackagingMachineNode::call_co_read(uint16_t index, uint8_t subindex, std::shared_ptr<uint32_t> data)
+{
+  std::shared_ptr<CORead::Request> request = std::make_shared<CORead::Request>();
+
+  request->index = index;
+  request->subindex = subindex;
+
+  co_read_wait_for_service();
+
+  using ServiceResponseFuture = rclcpp::Client<CORead>::SharedFuture;
+  auto response_received_cb = [this, data](ServiceResponseFuture future) {
+    auto srv_response = future.get();
+    if (srv_response) 
+    {
+      *data = srv_response->data;
+      RCLCPP_DEBUG(this->get_logger(), "Inside the COWrite Callback OK");
+    } else 
+    {
+      RCLCPP_ERROR(this->get_logger(), "Inside the COWrite Callback NOT OK");
+    }
+  };
+ 
+  auto future = co_read_client_->async_send_request(request, response_received_cb);
+
+  std::future_status status = future.wait_for(500ms);
+  switch (status)
+  {
+  case std::future_status::ready:
+    RCLCPP_DEBUG(this->get_logger(), "call_co_read wait_for OK");
+    return true;
+  case std::future_status::timeout:
+    RCLCPP_ERROR(this->get_logger(), "call_co_read wait_for timeout");
+    return false;
+  default: 
+    RCLCPP_ERROR(this->get_logger(), "call_co_read wait_for NOT OK");
+    return false;
+  }
+}
+
+bool PackagingMachineNode::call_co_write_w_spin(uint16_t index, uint8_t subindex, uint32_t data)
+{
+  std::shared_ptr<COWrite::Request> request = std::make_shared<COWrite::Request>();
+
+  request->index = index;
+  request->subindex = subindex;
+  request->data = data;
+
+  co_write_wait_for_service();
 
   auto future = co_write_client_->async_send_request(request);
   if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future, 200ms) == rclcpp::FutureReturnCode::SUCCESS)
@@ -233,28 +336,20 @@ bool PackagingMachineNode::call_co_write(uint16_t _index, uint8_t _subindex, uin
   }
 }
 
-bool PackagingMachineNode::call_co_read(uint16_t _index, uint8_t _subindex, std::shared_ptr<uint32_t> _data)
+bool PackagingMachineNode::call_co_read_w_spin(uint16_t index, uint8_t subindex, std::shared_ptr<uint32_t> data)
 {
   std::shared_ptr<CORead::Request> request = std::make_shared<CORead::Request>();
 
-  request->index = _index;
-  request->subindex = _subindex;
+  request->index = index;
+  request->subindex = subindex;
 
-  while (!co_read_client_->wait_for_service(std::chrono::seconds(1)))
-  {
-    if (!rclcpp::ok())
-    {
-      RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting");
-      return false;
-    }
-    RCLCPP_INFO(this->get_logger(), "CORead Service not available, waiting again...");
-  }
+  co_read_wait_for_service();
  
   auto future = co_read_client_->async_send_request(request);
   if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future, 200ms) == rclcpp::FutureReturnCode::SUCCESS)
   {
     auto response = future.get();
-    *_data = response->data;
+    *data = response->data;
     return response->success;
   } else {
     return false;
@@ -341,25 +436,16 @@ void PackagingMachineNode::rpdo_cb(const COData::SharedPtr msg)
   }
 }
 
-void PackagingMachineNode::wait_for_idle_motor(
-  const uint8_t & motor_state, 
-  const uint16_t waiting_rate)
+// ===================================== Service =====================================
+void PackagingMachineNode::init_handle(
+  const std::shared_ptr<Trigger::Request> request, 
+  std::shared_ptr<Trigger::Response> response)
 {
-  RCLCPP_INFO(this->get_logger(), "wait_for_idle_motor");
-  rclcpp::Rate rate(waiting_rate);
-  while (rclcpp::ok())
-  {
-    {
-      const std::lock_guard<std::mutex> lock(this->mutex_);
-      if (motor_state == MotorStatus::IDLE)
-        break;
-    }
-    RCLCPP_INFO(this->get_logger(), "waiting for motor");
-    rate.sleep();
-  }
+  (void) request;
+  init_packaging_machine();
+  response->success = true;
 }
 
-// ===================================== Service =====================================
 void PackagingMachineNode::heater_handle(
   const std::shared_ptr<SetBool::Request> request, 
   std::shared_ptr<SetBool::Response> response)
@@ -408,12 +494,12 @@ bool PackagingMachineNode::ctrl_heater(const bool on)
   return result;
 }
 
-bool PackagingMachineNode::write_heater(const uint32_t data)
+inline bool PackagingMachineNode::write_heater(const uint32_t data)
 {
   return call_co_write(0x6003, 0x0, data);
 }
 
-bool PackagingMachineNode::read_heater(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_heater(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6003, 0x0, data);
 }
@@ -427,12 +513,12 @@ bool PackagingMachineNode::ctrl_stopper(const bool protrude)
   return result;
 }
 
-bool PackagingMachineNode::write_stopper(const uint32_t data)
+inline bool PackagingMachineNode::write_stopper(const uint32_t data)
 {
   return call_co_write(0x6050, 0x0, data);
 }
 
-bool PackagingMachineNode::read_stopper(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_stopper(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6054, 0x0, data);
 }
@@ -446,12 +532,12 @@ bool PackagingMachineNode::ctrl_material_box_gate(const bool open)
   return result;
 }
 
-bool PackagingMachineNode::write_material_box_gate(const uint32_t data)
+inline bool PackagingMachineNode::write_material_box_gate(const uint32_t data)
 {
   return call_co_write(0x6051, 0x0, data);
 }
 
-bool PackagingMachineNode::read_material_box_gate(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_material_box_gate(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6055, 0x0, data);
 }
@@ -465,12 +551,12 @@ bool PackagingMachineNode::ctrl_cutter(const bool cut)
   return result;
 }
 
-bool PackagingMachineNode::write_cutter(const uint32_t data)
+inline bool PackagingMachineNode::write_cutter(const uint32_t data)
 {
   return call_co_write(0x6052, 0x0, data);
 }
 
-bool PackagingMachineNode::read_cutter(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_cutter(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6056, 0x0, data);
 }
@@ -485,7 +571,7 @@ bool PackagingMachineNode::ctrl_pkg_dis(
   bool result = true;
 
   result &= call_co_write(0x6011, 0x0, static_cast<uint32_t>(PULSES_PER_REV * length / (2 * M_PI * PKG_DIS_RADIUS)));
-  result &= call_co_write(0x6012, 0x0, feed ? 0 : 1); // Set to 0 to feed the package out
+  result &= call_co_write(0x6012, 0x0, feed ? 1 : 0); // Set to 0 to feed the package out
   result &= call_co_write(0x6019, 0x0, ctrl ? 1 : 0);
 
   if (result)
@@ -493,17 +579,21 @@ bool PackagingMachineNode::ctrl_pkg_dis(
   return result;
 }
 
-bool PackagingMachineNode::read_pkg_dis_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_pkg_dis_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6018, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_pkg_dis_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6019, 0x0, data);
 }
 
 // ===================================== pill_gate =====================================
 bool PackagingMachineNode::ctrl_pill_gate(
   const float length, 
   const bool open, 
-  const bool ctrl
-)
+  const bool ctrl)
 {
   bool result = true;
 
@@ -517,9 +607,14 @@ bool PackagingMachineNode::ctrl_pill_gate(
   return result;
 }
 
-bool PackagingMachineNode::read_pill_gate_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_pill_gate_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6028, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_pill_gate_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6029, 0x0, data);
 }
 
 // ===================================== squeezer =====================================
@@ -555,9 +650,14 @@ bool PackagingMachineNode::ctrl_squeezer(
   return result;
 }
 
-bool PackagingMachineNode::read_squeezer_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_squeezer_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6078, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_squeezer_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6079, 0x0, data);
 }
 
 // ===================================== conveyor =====================================
@@ -589,9 +689,14 @@ bool PackagingMachineNode::ctrl_conveyor(
   return result;
 }
 
-bool PackagingMachineNode::read_conveyor_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_conveyor_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6088, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_conveyor_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6089, 0x0, data);
 }
 
 // ===================================== roller =====================================
@@ -634,9 +739,14 @@ bool PackagingMachineNode::ctrl_roller(
   return result;
 }
 
-bool PackagingMachineNode::read_roller_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_roller_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6038, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_roller_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6039, 0x0, data);
 }
 
 // ===================================== pkg_len =====================================
@@ -674,9 +784,14 @@ bool PackagingMachineNode::ctrl_pkg_len(
   return result;
 }
 
-bool PackagingMachineNode::read_pkg_len_state(std::shared_ptr<uint32_t> data)
+inline bool PackagingMachineNode::read_pkg_len_state(std::shared_ptr<uint32_t> data)
 {
   return call_co_read(0x6048, 0x0, data);
+}
+
+inline bool PackagingMachineNode::read_pkg_len_ctrl(std::shared_ptr<uint32_t> data)
+{
+  return call_co_read(0x6049, 0x0, data);
 }
 
 // ===================================== wait for =====================================
@@ -752,21 +867,23 @@ void PackagingMachineNode::wait_for_cutter(const uint32_t stop_condition)
   }
 }
 
-void PackagingMachineNode::wait_for_pkg_dis_idle()
+void PackagingMachineNode::wait_for_pkg_dis(const uint8_t target_state)
 {
-  std::this_thread::sleep_for(250ms); 
+  std::this_thread::sleep_for(200ms); 
 
-  rclcpp::Rate rate(4);
+  rclcpp::Rate rate(5);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_pkg_dis_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "pkg_dis_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_pkg_dis_state(state);
+    read_pkg_dis_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "pkg_dis_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->pkg_dis_state = *data;
-      if (motor_status_->pkg_dis_state == MotorStatus::IDLE)
+      motor_status_->pkg_dis_state = *state;
+      if (motor_status_->pkg_dis_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "pkg_dis is idle");
         break;
@@ -776,21 +893,23 @@ void PackagingMachineNode::wait_for_pkg_dis_idle()
   }
 }
 
-void PackagingMachineNode::wait_for_pill_gate_idle()
+void PackagingMachineNode::wait_for_pill_gate(const uint8_t target_state)
 {
-  std::this_thread::sleep_for(250ms); 
+  std::this_thread::sleep_for(200ms); 
 
-  rclcpp::Rate rate(4);
+  rclcpp::Rate rate(5);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_pill_gate_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "pill_gate_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_pill_gate_state(state);
+    read_pill_gate_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "pill_gate_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->pill_gate_state = *data;
-      if (motor_status_->pill_gate_state == MotorStatus::IDLE)
+      motor_status_->pill_gate_state = *state;
+      if (motor_status_->pill_gate_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "pill_gate is idle");
         break;
@@ -800,21 +919,23 @@ void PackagingMachineNode::wait_for_pill_gate_idle()
   }
 }
 
-void PackagingMachineNode::wait_for_squeezer_idle()
+void PackagingMachineNode::wait_for_squeezer(const uint8_t target_state)
 {
-  std::this_thread::sleep_for(500ms); 
+  std::this_thread::sleep_for(400ms); 
 
   rclcpp::Rate rate(2);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_squeezer_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "squeezer_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_squeezer_state(state);
+    read_squeezer_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "squeezer_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->squ_state = *data;
-      if (motor_status_->squ_state == MotorStatus::IDLE)
+      motor_status_->squ_state = *state;
+      if (motor_status_->squ_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "squeezer_state is idle");
         break;
@@ -824,21 +945,23 @@ void PackagingMachineNode::wait_for_squeezer_idle()
   }
 }
 
-void PackagingMachineNode::wait_for_conveyor_idle()
+void PackagingMachineNode::wait_for_conveyor(const uint8_t target_state)
 {
-  std::this_thread::sleep_for(500ms); 
+  std::this_thread::sleep_for(400ms); 
 
   rclcpp::Rate rate(2);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_conveyor_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "conveyor_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_conveyor_state(state);
+    read_conveyor_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "conveyor_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->con_state = *data;
-      if (motor_status_->con_state == MotorStatus::IDLE)
+      motor_status_->con_state = *state;
+      if (motor_status_->con_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "conveyor_state is idle");
         break;
@@ -848,21 +971,23 @@ void PackagingMachineNode::wait_for_conveyor_idle()
   }
 }
 
-void PackagingMachineNode::wait_for_roller_idle()
+void PackagingMachineNode::wait_for_roller(const uint8_t target_state)
 {
   std::this_thread::sleep_for(200ms); 
 
   rclcpp::Rate rate(5);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_roller_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "roller_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_roller_state(state);
+    read_roller_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "roller_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->roller_state = *data;
-      if (motor_status_->roller_state == MotorStatus::IDLE)
+      motor_status_->roller_state = *state;
+      if (motor_status_->roller_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "roller_state is idle");
         break;
@@ -872,21 +997,23 @@ void PackagingMachineNode::wait_for_roller_idle()
   }
 }
 
-void PackagingMachineNode::wait_for_pkg_len_idle()
+void PackagingMachineNode::wait_for_pkg_len(const uint8_t target_state)
 {
-  std::this_thread::sleep_for(100ms); 
+  std::this_thread::sleep_for(200ms); 
 
-  rclcpp::Rate rate(10);
+  rclcpp::Rate rate(5);
   while (rclcpp::ok())
   {
-    std::shared_ptr<uint32_t> data = std::make_shared<uint32_t>(0);
-    read_pkg_len_state(data);
-    RCLCPP_DEBUG(this->get_logger(), "pkg_len_state: %d", *data);
+    std::shared_ptr<uint32_t> state = std::make_shared<uint32_t>(0);
+    std::shared_ptr<uint32_t> ctrl = std::make_shared<uint32_t>(0);
+    read_pkg_len_state(state);
+    read_pkg_len_ctrl(ctrl);
+    RCLCPP_DEBUG(this->get_logger(), "pkg_len_state: %d, ctrl: %d", *state, *ctrl);
 
     {
       const std::lock_guard<std::mutex> lock(this->mutex_);
-      motor_status_->pkg_len_state = *data;
-      if (motor_status_->pkg_len_state == MotorStatus::IDLE)
+      motor_status_->pkg_len_state = *state;
+      if (motor_status_->pkg_len_state == target_state && *ctrl == 0)
       {
         RCLCPP_INFO(this->get_logger(), "pkg_len_state is idle");
         break;
@@ -904,34 +1031,40 @@ void PackagingMachineNode::init_printer_config()
   printer_->addDefaultConfig("GAP", "25 mm");
   printer_->addDefaultConfig("DENSITY", "8");
   printer_->addDefaultConfig("SPEED", "3");
+  printer_->addDefaultConfig("SET PEEL", "ON");
   printer_->addDefaultConfig("CLS");
   // printer_->addDefaultConfig("DIRECTION", "0, 0");
-  // printer_->addDefaultConfig("OFFSET", "4 mm");
   // printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
 }
 
-std::vector<std::string> PackagingMachineNode::get_print_label_cmd(std::shared_ptr<PackageInfo> msg)
+std::vector<std::string> PackagingMachineNode::get_print_label_cmd(PackageInfo msg)
 {
   std::vector<std::string> cmds{};
-  std::string gbk_cn = printer_->convert_utf8_to_gbk(msg->cn_name);
-  std::string cn = "TEXT 240,180,\"TSS24.BF2\",0,2,2,\"" + gbk_cn + "\"";
-  cmds.emplace_back(cn);
-  std::string en = "TEXT 600,186,\"TSS24.BF2\",0,2,2,\"" + msg->en_name + "\"";
-  cmds.emplace_back(en);
-  std::string d = "TEXT 240,270,\"4\",0,1,1,\"" + msg->date + "\"";
-  cmds.emplace_back(d);
-  std::string t = "TEXT 240,334,\"4\",0,1,1,\"" + msg->time + "\"";
-  cmds.emplace_back(t);
-  cmds.emplace_back("QRCODE 684,252,L,6,A,0,\"www.hkclr.hk\"");
-  for (size_t index = 0; index < msg->drugs.size(); ++index) 
+  if (!msg.en_name.empty())
   {
-    std::string utf_md = msg->drugs[index];
-    std::string gbk_md = printer_->convert_utf8_to_gbk(utf_md);
-    int y = 400 + index * 64;
-    std::string y_label = std::to_string(y);
-    std::string m = "TEXT 240,"+ y_label + ",\"TSS24.BF2\",0,2,2,\"" + gbk_md + "\"";
-    cmds.emplace_back(m);
+    RCLCPP_INFO(this->get_logger(), "Add a english name: %s", msg.en_name.c_str());
+
+    std::string gbk_cn = printer_->convert_utf8_to_gbk(msg.cn_name);
+    std::string cn = "TEXT 240,180,\"TSS24.BF2\",0,2,2,\"" + gbk_cn + "\"";
+    cmds.emplace_back(cn);
+    std::string en = "TEXT 600,186,\"TSS24.BF2\",0,2,2,\"" + msg.en_name + "\"";
+    cmds.emplace_back(en);
+    std::string d = "TEXT 240,270,\"4\",0,1,1,\"" + msg.date + "\"";
+    cmds.emplace_back(d);
+    std::string t = "TEXT 240,334,\"4\",0,1,1,\"" + msg.time + "\"";
+    cmds.emplace_back(t);
+    cmds.emplace_back("QRCODE 684,252,L,6,A,0,\"www.hkclr.hk\"");
+    for (size_t index = 0; index < msg.drugs.size(); ++index) 
+    {
+      std::string utf_md = msg.drugs[index];
+      std::string gbk_md = printer_->convert_utf8_to_gbk(utf_md);
+      int y = 400 + index * 64;
+      std::string y_label = std::to_string(y);
+      std::string m = "TEXT 240,"+ y_label + ",\"TSS24.BF2\",0,2,2,\"" + gbk_md + "\"";
+      cmds.emplace_back(m);
+    }
   }
+
   cmds.emplace_back("PRINT 1");
 
   return cmds;
@@ -944,18 +1077,20 @@ rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
   (void)uuid;
   RCLCPP_INFO(this->get_logger(), "print_info size: %lu", goal->print_info.size());
 
-  // printer_.reset();
-  // printer_ = std::make_shared<Printer>(
-  //   printer_config_->vendor_id, 
-  //   printer_config_->product_id, 
-  //   printer_config_->serial);
-  // init_printer_config();
-
-  // Assume the print_info size MUST be 28
+  printer_.reset();
+  printer_ = std::make_shared<Printer>(
+    printer_config_->vendor_id, 
+    printer_config_->product_id, 
+    printer_config_->serial);
+  RCLCPP_INFO(this->get_logger(), "printer initialized");
+  init_printer_config();
+  
   {
     const std::lock_guard<std::mutex> lock(this->mutex_);
     status_->packaging_machine_state = PackagingMachineStatus::BLOCKING;
     status_->conveyor_state = PackagingMachineStatus::UNAVAILABLE;
+    RCLCPP_INFO(this->get_logger(), "set packaging_machine_state to BLOCKING");
+    RCLCPP_INFO(this->get_logger(), "set conveyor_state to UNAVAILABLE");
   }
   
   ctrl_stopper(1);
@@ -963,7 +1098,10 @@ rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
 
   if (!ctrl_conveyor(CONVEYOR_SPEED, 1, 1, 1))
   {
+    const std::lock_guard<std::mutex> lock(this->mutex_);
     status_->packaging_machine_state = PackagingMachineStatus::ERROR;
+    RCLCPP_ERROR(this->get_logger(), "set packaging_machine_state to ERROR");
+    RCLCPP_ERROR(this->get_logger(), "REJECT");
     return rclcpp_action::GoalResponse::REJECT;
   }
   
@@ -971,14 +1109,17 @@ rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
   uint8_t retry = 0;
   const uint8_t MAX_RETRY = 10;
   rclcpp::Rate loop_rate(1s); 
-
   for (; retry < MAX_RETRY && rclcpp::ok(); ++retry) 
   {
-    if (!info_->conveyor) 
+    RCLCPP_INFO(this->get_logger(), "Waiting for the material box, conveyor photoelectic: %s", info_->conveyor ? "1" : "0");
     {
-      RCLCPP_INFO(this->get_logger(), "Checking conveyor photoelectric senser: %s", info_->conveyor ? "1" : "0");
-      status_->packaging_machine_state = PackagingMachineStatus::BUSY;
-      break;
+      if (!info_->conveyor) 
+      {
+        const std::lock_guard<std::mutex> lock(this->mutex_);
+        RCLCPP_INFO(this->get_logger(), "Checking conveyor photoelectric senser: %s", info_->conveyor ? "1" : "0");
+        status_->packaging_machine_state = PackagingMachineStatus::BUSY;
+        break;
+      }
     }
     loop_rate.sleep();
   }
@@ -1017,12 +1158,13 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
   auto& are_drugs_fallen = feedback->are_drugs_fallen;
   auto result = std::make_shared<PackagingOrder::Result>();
 
-  RCLCPP_INFO(this->get_logger(), "packaging sequence 1");
+  RCLCPP_INFO(this->get_logger(), "======== packaging sequence 1 ==========");
 
   ctrl_material_box_gate(1);
   wait_for_material_box_gate(1);
 
-  std::this_thread::sleep_for(2s);
+  std::this_thread::sleep_for(3s);
+
   ctrl_material_box_gate(0);
   wait_for_material_box_gate(0);
 
@@ -1037,13 +1179,13 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
   }
 
   ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 1);
+  // TODO: publish msg to request another packaging machine conveyor to move
 
-  RCLCPP_INFO(this->get_logger(), "packaging sequence 2");
+  RCLCPP_INFO(this->get_logger(), "========== packaging sequence 2 ==========");
   uint8_t day = 0;
   size_t cell_index = 0;
   size_t print_index = 0;
   std::vector<size_t> to_be_printed{};
-  // curr_order_status.resize(CELLS);
 
   for (uint8_t i = 0; i < CELLS; i++)
   {
@@ -1053,98 +1195,122 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
     }
   }
 
+  RCLCPP_INFO(this->get_logger(), "print_info size: %ld", to_be_printed.size());
+
   for (; print_index < PKG_PREFIX; print_index++)
   {
-    if (to_be_printed.at(print_index))
+    if (print_index < to_be_printed.size() && to_be_printed.at(print_index))
     {
-      // auto cmd = get_print_label_cmd("testing", 0, 0);
-      // printer_->runTask(cmd);
+      std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index++]);
+      printer_->runTask(cmd);
       RCLCPP_INFO(this->get_logger(), "printed a order package");
-      std::this_thread::sleep_for(1s);
     } else {
-      // auto cmd = get_print_label_cmd("testing", 0, 0);
-      // printer_->runTask(cmd);
+      PackageInfo __msg;
+      std::vector<std::string> cmd = get_print_label_cmd(__msg);
+      printer_->runTask(cmd);
       RCLCPP_INFO(this->get_logger(), "printed a empty package");
-      std::this_thread::sleep_for(1s);
     }
-    ctrl_pkg_dis(status_->package_length, 1, 1);
-    wait_for_pkg_dis_idle();
+    std::this_thread::sleep_for(1s);
+    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    wait_for_pkg_dis(MotorStatus::IDLE);
 
     ctrl_squeezer(1, 1);
-    wait_for_squeezer_idle();
+    wait_for_squeezer(MotorStatus::IDLE);
 
     std::this_thread::sleep_for(500ms);
 
     ctrl_squeezer(0, 1);
-    wait_for_squeezer_idle();
+    wait_for_squeezer(MotorStatus::IDLE);
+    RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> print_index: %ld <<<<<<<<<<", print_index);
   }
 
   RCLCPP_INFO(this->get_logger(), "Printed 4 prefix");
 
   for (; day < DAYS; day++)
   {
-    ctrl_roller(1, 0, 1);
-    wait_for_roller_idle();
+    RCLCPP_INFO(this->get_logger(), "@@@@@@@@@@ Day: %d @@@@@@@@@@", day);
 
-    for (uint8_t i = 0; i < CELLS_PER_DAY; i++)
+    ctrl_roller(1, 0, 1);
+    wait_for_roller(MotorStatus::IDLE);
+
+    std::this_thread::sleep_for(500ms);
+
+    for (uint8_t k = 0; k < CELLS_PER_DAY; k++)
     {
-      RCLCPP_INFO(this->get_logger(), "cell_index: %ld", cell_index);
+      RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> cell_index: %ld <<<<<<<<<<", cell_index);
       ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
-      wait_for_pill_gate_idle();
+      wait_for_pill_gate(MotorStatus::IDLE);
 
       auto it = std::find(to_be_printed.begin(), to_be_printed.end(), cell_index);
       
       if (it != to_be_printed.end())
       {
-        if (to_be_printed.at(print_index))
+        if (print_index < CELLS && to_be_printed.at(print_index))
         {
-          // auto cmd = get_print_label_cmd("testing", 0, 0);
-          // printer_->runTask(cmd);
+          std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
+          printer_->runTask(cmd);
           RCLCPP_INFO(this->get_logger(), "printed a order package");
-          std::this_thread::sleep_for(1s);
         } else {
-          // auto cmd = get_print_label_cmd("testing", 0, 0);
-          // printer_->runTask(cmd);
+          PackageInfo __msg;
+          std::vector<std::string> cmd = get_print_label_cmd(__msg);
+          printer_->runTask(cmd);
           RCLCPP_INFO(this->get_logger(), "printed a empty package");
-          std::this_thread::sleep_for(1s);
         }
-        ctrl_pkg_dis(status_->package_length, 1, 1);
-        wait_for_pkg_dis_idle();
+        std::this_thread::sleep_for(1s);
+        ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+        wait_for_pkg_dis(MotorStatus::IDLE);
 
         ctrl_squeezer(1, 1);
-        wait_for_squeezer_idle();
+        wait_for_squeezer(MotorStatus::IDLE);
 
         std::this_thread::sleep_for(500ms);
 
         ctrl_squeezer(0, 1);
-        wait_for_squeezer_idle();
+        wait_for_squeezer(MotorStatus::IDLE);
         print_index++;
       }
+      
       curr_order_status[cell_index] = true;
       goal_handle->publish_feedback(feedback);
       cell_index++;
     }
-    ctrl_pill_gate(PILL_GATE_WIDTH * 4 * 1.05, 0, 1);
-    wait_for_pill_gate_idle();
+
+    ctrl_pill_gate(PILL_GATE_WIDTH * 4 * PILL_GATE_CLOSE_MARGIN, 0, 1);
+    wait_for_pill_gate(MotorStatus::IDLE);
   }
+  RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> completed 28 cells <<<<<<<<<<");
+
   ctrl_roller(0, 1, 1);
-  wait_for_roller_idle();
+  wait_for_roller(MotorStatus::IDLE);
 
   for (uint8_t i = 0; i < PKG_PREFIX; i++)
   {
-    // auto cmd = get_print_label_cmd("testing", 0, 0);
-    // printer_->runTask(cmd);
+    PackageInfo __msg;
+    std::vector<std::string> cmd = get_print_label_cmd(__msg);
+    printer_->runTask(cmd);
     RCLCPP_INFO(this->get_logger(), "printed a empty package");
-    std::this_thread::sleep_for(1s);
-  }
 
+    std::this_thread::sleep_for(1s);
+    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    wait_for_pkg_dis(MotorStatus::IDLE);
+
+    ctrl_squeezer(1, 1);
+    wait_for_squeezer(MotorStatus::IDLE);
+
+    std::this_thread::sleep_for(500ms);
+
+    ctrl_squeezer(0, 1);
+    wait_for_squeezer(MotorStatus::IDLE);
+  }
+  
   // ctrl_cutter(1);
   // std::this_thread::sleep_for(1s);
   // ctrl_cutter(0);
 
   // Check if goal is done
   if (rclcpp::ok()) {
-    // printer_.reset();
+    printer_.reset();
+    RCLCPP_INFO(this->get_logger(), "printer destroyed");
     result->order_result = curr_order_status;
     goal_handle->succeed(result);
     {
@@ -1165,5 +1331,6 @@ int main(int argc, char **argv)
 
   exec->add_node(node->get_node_base_interface());
   exec->spin();
+
   rclcpp::shutdown();
 }
