@@ -40,15 +40,35 @@
 #define NO_OF_REED_SWITCHS 8
 #define NO_OF_VALVES 4
 #define NO_OF_PHOTOELECTRIC_SENSERS 8
+#define NO_OF_PILL_GATES 4
 
-#define PKG_DIS_RADIUS 18   // in mm unit
-#define PILL_GATE_RADIUS 10 // in mm unit
-#define PILL_GATE_WIDTH 44  // in mm unit
+#define MOTOR_ENABLE  1
+#define MOTOR_DISABLE 0
+
+#define PKG_DIS_RADIUS        18   // in mm unit
+#define PKG_DIS_FEED_DIR      1
+#define PKG_DIS_UNFEED_DIR    0
+#define PKG_DIS_MARGIN_FACTOR 1.05
+
+#define PILL_GATE_RADIUS              10 // in mm unit
+#define PILL_GATE_WIDTH               44  // in mm unit
+#define PILL_GATE_OPEN_DIR            1
+#define PILL_GATE_CLOSE_DIR           0
+#define PILL_GATE_CLOSE_MARGIN_FACTOR 1.05
+
+#define SQUEEZER_ACTION_PUSH 1
+#define SQUEEZER_ACTION_PULL 0
 
 #define PULSES_PER_REV 3200
-
 #define CONVEYOR_SPEED 300
-#define PILL_GATE_CLOSE_MARGIN 1.05
+
+// Timing delays (in seconds and milliseconds)
+#define DELAY_GENERAL_VALVE           2s    // General valve delay in seconds
+#define DELAY_GENERAL_STEP            250ms // Step delay in milliseconds
+#define DELAY_PKG_DIS_WAIT_PRINTER    200ms // Wait for printer delay in milliseconds
+#define DELAY_PKG_DIS_BEFORE_SQUEEZER 100ms // Before squeezer delay in milliseconds
+#define DELAY_SQUEEZER                500ms // Squeezer delay in milliseconds
+#define DELAY_CONVEYOR_TESTING        1s    // Conveyor testing delay in seconds
 
 using namespace std::chrono_literals;
 

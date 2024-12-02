@@ -127,7 +127,7 @@ void PackagingMachineNode::init_packaging_machine(void)
 {
   RCLCPP_INFO(this->get_logger(), "init_packaging_machine start");
   ctrl_heater(1);
-  std::this_thread::sleep_for(200ms);
+  std::this_thread::sleep_for(DELAY_GENERAL_STEP);
 
   ctrl_stopper(1);
   wait_for_stopper(0);
@@ -135,7 +135,7 @@ void PackagingMachineNode::init_packaging_machine(void)
   ctrl_material_box_gate(1);
   wait_for_material_box_gate(1);
 
-  std::this_thread::sleep_for(1s);
+  std::this_thread::sleep_for(DELAY_GENERAL_VALVE);
 
   ctrl_stopper(0);
   wait_for_stopper(1);
@@ -143,28 +143,27 @@ void PackagingMachineNode::init_packaging_machine(void)
   ctrl_material_box_gate(0);
   wait_for_material_box_gate(0);
 
-  std::this_thread::sleep_for(500ms);
+  std::this_thread::sleep_for(DELAY_GENERAL_STEP);
 
-  ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
+  for (uint8_t i = 0; i < CELLS_PER_DAY; i++)
+  {
+    ctrl_pill_gate(PILL_GATE_WIDTH, PILL_GATE_OPEN_DIR, MOTOR_ENABLE);
+    wait_for_pill_gate(MotorStatus::IDLE);
+
+    std::this_thread::sleep_for(DELAY_GENERAL_STEP);
+  }
+
+  ctrl_pill_gate(PILL_GATE_WIDTH * NO_OF_PILL_GATES * PILL_GATE_CLOSE_MARGIN_FACTOR, PILL_GATE_CLOSE_DIR, MOTOR_ENABLE);
   wait_for_pill_gate(MotorStatus::IDLE);
 
-  std::this_thread::sleep_for(250ms);
-
-  ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
-  wait_for_pill_gate(MotorStatus::IDLE);
-
-  std::this_thread::sleep_for(250ms);
-
-  ctrl_pill_gate(PILL_GATE_WIDTH * 4 * PILL_GATE_CLOSE_MARGIN, 0, 1);
-  wait_for_pill_gate(MotorStatus::IDLE);
-
-  std::this_thread::sleep_for(250ms);
+  std::this_thread::sleep_for(DELAY_GENERAL_STEP);
 
   printer_ = std::make_shared<Printer>(
     printer_config_->vendor_id, 
     printer_config_->product_id, 
     printer_config_->serial);
   RCLCPP_INFO(this->get_logger(), "printer initialized");
+  init_printer_config();
 
   for (uint8_t i = 0; i < 4; i++)
   {
@@ -178,27 +177,29 @@ void PackagingMachineNode::init_packaging_machine(void)
     printer_->runTask(cmd);
     RCLCPP_INFO(this->get_logger(), "printed a empty package");
 
-    std::this_thread::sleep_for(1s);
-    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    std::this_thread::sleep_for(DELAY_PKG_DIS_WAIT_PRINTER);
+    ctrl_pkg_dis(status_->package_length * PKG_DIS_MARGIN_FACTOR, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
     wait_for_pkg_dis(MotorStatus::IDLE);
 
-    ctrl_squeezer(1, 1);
+    std::this_thread::sleep_for(DELAY_PKG_DIS_BEFORE_SQUEEZER);
+
+    ctrl_squeezer(SQUEEZER_ACTION_PUSH, MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
 
-    std::this_thread::sleep_for(400ms);
+    std::this_thread::sleep_for(DELAY_SQUEEZER);
 
-    ctrl_squeezer(0, 1);
+    ctrl_squeezer(SQUEEZER_ACTION_PULL , MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
   }
 
   printer_.reset();
   RCLCPP_INFO(this->get_logger(), "printer destroyed");
 
-  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 1);
-  std::this_thread::sleep_for(2s);
-  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 0);
+  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, MOTOR_ENABLE);
+  std::this_thread::sleep_for(DELAY_CONVEYOR_TESTING);
+  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, MOTOR_DISABLE);
 
-  ctrl_roller(0, 1, 1);
+  ctrl_roller(0, 1, MOTOR_ENABLE);
   wait_for_roller(MotorStatus::IDLE);
 
   const std::lock_guard<std::mutex> lock(this->mutex_);
@@ -1028,12 +1029,19 @@ void PackagingMachineNode::init_printer_config()
 {
   printer_->configure(printer_config_->endpoint_in, printer_config_->endpoint_out, printer_config_->timeout);
   printer_->addDefaultConfig("SIZE", "75 mm,80 mm");
-  printer_->addDefaultConfig("GAP", "25 mm");
-  printer_->addDefaultConfig("DENSITY", "8");
-  printer_->addDefaultConfig("SPEED", "3");
-  printer_->addDefaultConfig("SET PEEL", "ON");
+  printer_->addDefaultConfig("GAP", "0 mm, 0mm");
+  printer_->addDefaultConfig("DIRECTION", "0, 0");
+  printer_->addDefaultConfig("REFERENCE", "-90, -120"); // FIXME: should be ROS2 parameter
+  printer_->addDefaultConfig("OFFSET", "0 mm");
+  printer_->addDefaultConfig("SHIFT", "0");
+  printer_->addDefaultConfig("SET", "TEAR OFF");
+  printer_->addDefaultConfig("SET", "REWIND OFF");
+  printer_->addDefaultConfig("SET", "PEEL OFF");
+  printer_->addDefaultConfig("SET", "CUTTER OFF");
+  printer_->addDefaultConfig("SET", "PARTIAL_CUTTER OFF");
   printer_->addDefaultConfig("CLS");
-  // printer_->addDefaultConfig("DIRECTION", "0, 0");
+  // printer_->addDefaultConfig("DENSITY", "8");
+  // printer_->addDefaultConfig("SPEED", "1");
   // printer_->addDefaultConfig("REFERENCE", std::to_string(printer_config_->dots_per_mm * 10) + ", " + std::to_string(0));
 }
 
@@ -1042,7 +1050,7 @@ std::vector<std::string> PackagingMachineNode::get_print_label_cmd(PackageInfo m
   std::vector<std::string> cmds{};
   if (!msg.en_name.empty())
   {
-    RCLCPP_INFO(this->get_logger(), "Add a english name: %s", msg.en_name.c_str());
+    RCLCPP_INFO(this->get_logger(), "added a english name: %s", msg.en_name.c_str());
 
     std::string gbk_cn = printer_->convert_utf8_to_gbk(msg.cn_name);
     std::string cn = "TEXT 240,180,\"TSS24.BF2\",0,2,2,\"" + gbk_cn + "\"";
@@ -1065,8 +1073,8 @@ std::vector<std::string> PackagingMachineNode::get_print_label_cmd(PackageInfo m
     }
   }
 
-  cmds.emplace_back("PRINT 1");
-
+  cmds.emplace_back("PRINT 1,1");
+  RCLCPP_DEBUG(this->get_logger(), "printer commands are ready");
   return cmds;
 }
 
@@ -1096,7 +1104,7 @@ rclcpp_action::GoalResponse PackagingMachineNode::handle_goal(
   ctrl_stopper(1);
   wait_for_stopper(0);
 
-  if (!ctrl_conveyor(CONVEYOR_SPEED, 1, 1, 1))
+  if (!ctrl_conveyor(CONVEYOR_SPEED, 1, 1, MOTOR_ENABLE))
   {
     const std::lock_guard<std::mutex> lock(this->mutex_);
     status_->packaging_machine_state = PackagingMachineStatus::ERROR;
@@ -1178,7 +1186,7 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
     RCLCPP_INFO(this->get_logger(), "Set conveyor_state to AVAILABLE");
   }
 
-  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, 1);
+  ctrl_conveyor(CONVEYOR_SPEED, 0, 1, MOTOR_ENABLE);
   // TODO: publish msg to request another packaging machine conveyor to move
 
   RCLCPP_INFO(this->get_logger(), "========== packaging sequence 2 ==========");
@@ -1194,12 +1202,21 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
       to_be_printed.push_back(i);
     }
   }
-
+  for (uint8_t i = 0; i < to_be_printed.size(); i++) 
+  {
+    RCLCPP_INFO(this->get_logger(), "to_be_printed[%d]: %ld", i, to_be_printed.at(i));
+  }
   RCLCPP_INFO(this->get_logger(), "print_info size: %ld", to_be_printed.size());
+
+  // make sure the package bag is tighten
+  ctrl_pkg_dis(status_->package_length / 4, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
+  wait_for_pkg_dis(MotorStatus::IDLE);
 
   for (; print_index < PKG_PREFIX; print_index++)
   {
-    if (print_index < to_be_printed.size() && to_be_printed.at(print_index))
+    RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> cell_index: %ld <<<<<<<<<<", cell_index);
+    RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> print_index: %ld <<<<<<<<<<", print_index);
+    if (print_index < to_be_printed.size())
     {
       std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
       printer_->runTask(cmd);
@@ -1210,80 +1227,99 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
       printer_->runTask(cmd);
       RCLCPP_INFO(this->get_logger(), "printed a empty package");
     }
-    std::this_thread::sleep_for(1s);
-    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    std::this_thread::sleep_for(DELAY_PKG_DIS_WAIT_PRINTER);
+    ctrl_pkg_dis(status_->package_length * PKG_DIS_MARGIN_FACTOR, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
     wait_for_pkg_dis(MotorStatus::IDLE);
 
-    ctrl_squeezer(1, 1);
+    std::this_thread::sleep_for(DELAY_PKG_DIS_BEFORE_SQUEEZER);
+
+    ctrl_squeezer(SQUEEZER_ACTION_PUSH, MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
 
-    std::this_thread::sleep_for(500ms);
+    std::this_thread::sleep_for(DELAY_SQUEEZER);
 
-    ctrl_squeezer(0, 1);
+    ctrl_squeezer(SQUEEZER_ACTION_PULL , MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
-
-    cell_index++;
-    RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> print_index: %ld <<<<<<<<<<", print_index);
+    
+    if (cell_index < CELLS)
+      cell_index++;
   }
-
   RCLCPP_INFO(this->get_logger(), "Printed 4 prefix");
 
+  // FIXME: the flow is incorrect, TBD
   for (; day < DAYS; day++)
   {
     RCLCPP_INFO(this->get_logger(), "@@@@@@@@@@ Day: %d @@@@@@@@@@", day);
 
-    ctrl_roller(1, 0, 1);
+    ctrl_roller(1, 0, MOTOR_ENABLE);
     wait_for_roller(MotorStatus::IDLE);
 
-    std::this_thread::sleep_for(500ms);
+    std::this_thread::sleep_for(DELAY_GENERAL_STEP);
 
     for (uint8_t k = 0; k < CELLS_PER_DAY; k++)
     {
       RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> cell_index: %ld <<<<<<<<<<", cell_index);
-      ctrl_pill_gate(PILL_GATE_WIDTH, 1, 1);
+      RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> print_index: %ld <<<<<<<<<<", print_index);
+      ctrl_pill_gate(PILL_GATE_WIDTH, PILL_GATE_OPEN_DIR, MOTOR_ENABLE);
       wait_for_pill_gate(MotorStatus::IDLE);
 
       auto it = std::find(to_be_printed.begin(), to_be_printed.end(), cell_index);
       
-      if (it != to_be_printed.end())
+      if (it != to_be_printed.end() && print_index < to_be_printed.size())
       {
-        if (print_index < CELLS && to_be_printed.at(print_index))
-        {
-          std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
-          printer_->runTask(cmd);
-          RCLCPP_INFO(this->get_logger(), "printed a order %ld package", cell_index);
-        } else {
-          PackageInfo __msg;
-          std::vector<std::string> cmd = get_print_label_cmd(__msg);
-          printer_->runTask(cmd);
-          RCLCPP_INFO(this->get_logger(), "printed a empty package");
-        }
-        std::this_thread::sleep_for(1s);
-        ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+        std::vector<std::string> cmd = get_print_label_cmd(goal->print_info[cell_index]);
+        printer_->runTask(cmd);
+        RCLCPP_INFO(this->get_logger(), "printed a order %ld package", cell_index);
+
+        std::this_thread::sleep_for(DELAY_PKG_DIS_WAIT_PRINTER);
+        ctrl_pkg_dis(status_->package_length * PKG_DIS_MARGIN_FACTOR, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
         wait_for_pkg_dis(MotorStatus::IDLE);
 
-        ctrl_squeezer(1, 1);
+        std::this_thread::sleep_for(DELAY_PKG_DIS_BEFORE_SQUEEZER);
+
+        ctrl_squeezer(SQUEEZER_ACTION_PUSH, MOTOR_ENABLE);
         wait_for_squeezer(MotorStatus::IDLE);
 
-        std::this_thread::sleep_for(500ms);
+        std::this_thread::sleep_for(DELAY_SQUEEZER);
 
-        ctrl_squeezer(0, 1);
+        ctrl_squeezer(SQUEEZER_ACTION_PULL , MOTOR_ENABLE);
         wait_for_squeezer(MotorStatus::IDLE);
         print_index++;
+      } 
+      else if (cell_index == CELLS) 
+      {
+        PackageInfo __msg;
+        std::vector<std::string> cmd = get_print_label_cmd(__msg);
+        printer_->runTask(cmd);
+        RCLCPP_INFO(this->get_logger(), "printed a empty package");
+
+        std::this_thread::sleep_for(DELAY_PKG_DIS_WAIT_PRINTER);
+        ctrl_pkg_dis(status_->package_length * PKG_DIS_MARGIN_FACTOR, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
+        wait_for_pkg_dis(MotorStatus::IDLE);
+
+        std::this_thread::sleep_for(DELAY_PKG_DIS_BEFORE_SQUEEZER);
+
+        ctrl_squeezer(SQUEEZER_ACTION_PUSH, MOTOR_ENABLE);
+        wait_for_squeezer(MotorStatus::IDLE);
+
+        std::this_thread::sleep_for(DELAY_SQUEEZER);
+
+        ctrl_squeezer(SQUEEZER_ACTION_PULL , MOTOR_ENABLE);
+        wait_for_squeezer(MotorStatus::IDLE);
       }
       
-      curr_order_status[cell_index] = true;
+      if (cell_index < CELLS)
+      {
+        curr_order_status[cell_index] = true;
+        cell_index++;
+      }
       goal_handle->publish_feedback(feedback);
-      cell_index++;
     }
 
-    ctrl_pill_gate(PILL_GATE_WIDTH * 4 * PILL_GATE_CLOSE_MARGIN, 0, 1);
+    ctrl_pill_gate(PILL_GATE_WIDTH * NO_OF_PILL_GATES * PILL_GATE_CLOSE_MARGIN_FACTOR, PILL_GATE_CLOSE_DIR, MOTOR_ENABLE);
     wait_for_pill_gate(MotorStatus::IDLE);
   }
   RCLCPP_INFO(this->get_logger(), ">>>>>>>>>> completed 28 cells <<<<<<<<<<");
-
-  ctrl_roller(0, 1, 1);
-  wait_for_roller(MotorStatus::IDLE);
 
   for (uint8_t i = 0; i < PKG_PREFIX; i++)
   {
@@ -1292,21 +1328,24 @@ void PackagingMachineNode::order_execute(const std::shared_ptr<GaolHandlerPackag
     printer_->runTask(cmd);
     RCLCPP_INFO(this->get_logger(), "printed a empty package");
 
-    std::this_thread::sleep_for(1s);
-    ctrl_pkg_dis(status_->package_length * 1.2, 1, 1);
+    std::this_thread::sleep_for(DELAY_PKG_DIS_WAIT_PRINTER);
+    ctrl_pkg_dis(status_->package_length * PKG_DIS_MARGIN_FACTOR, PKG_DIS_FEED_DIR, MOTOR_ENABLE);
     wait_for_pkg_dis(MotorStatus::IDLE);
 
-    ctrl_squeezer(1, 1);
+    ctrl_squeezer(SQUEEZER_ACTION_PUSH, MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
 
-    std::this_thread::sleep_for(500ms);
+    std::this_thread::sleep_for(DELAY_SQUEEZER);
 
-    ctrl_squeezer(0, 1);
+    ctrl_squeezer(SQUEEZER_ACTION_PULL , MOTOR_ENABLE);
     wait_for_squeezer(MotorStatus::IDLE);
   }
+
+  ctrl_roller(0, 1, MOTOR_ENABLE);
+  wait_for_roller(MotorStatus::IDLE);
   
   // ctrl_cutter(1);
-  // std::this_thread::sleep_for(1s);
+  // std::this_thread::sleep_for(DELAY_GENERAL_VALVE);
   // ctrl_cutter(0);
 
   // Check if goal is done
