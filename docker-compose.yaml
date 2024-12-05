@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
     networks:
       packaging_network:
-        ipv4_address: 10.8.104.3
+        ipv4_address: 10.8.104.10
     deploy:
       resources:
         limits:
