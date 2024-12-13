@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <sstream>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -23,6 +24,8 @@
 #include "smdps_msgs/msg/unbind_order_id.hpp"
 
 #include "smdps_msgs/srv/packaging_order.hpp"
+
+#define CELLS 28
 
 using namespace std::chrono_literals;
 

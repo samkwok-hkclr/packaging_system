@@ -174,38 +174,100 @@ void PackagingMachineManager::packaging_order_handle(
   load_node_srv_request->plugin_name = "action_client::PackagingMachineActionClient";
   load_node_srv_request->node_name = "action_client_" + std::to_string(request->order_id);
 
-  rcl_interfaces::msg::Parameter p1;
   rcl_interfaces::msg::ParameterValue p1_v;
   p1_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p1_v.integer_value = target_machine_id;
+  rcl_interfaces::msg::Parameter p1;
   p1.name = "packaging_machine_id";
   p1.value = p1_v;
 
-  rcl_interfaces::msg::Parameter p2;
   rcl_interfaces::msg::ParameterValue p2_v;
   p2_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p2_v.integer_value = request->order_id;
+  rcl_interfaces::msg::Parameter p2;
   p2.name = "order_id";
   p2.value = p2_v;
 
-  rcl_interfaces::msg::Parameter p3;
   rcl_interfaces::msg::ParameterValue p3_v;
   p3_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
   p3_v.integer_value = request->material_box_id;
+  rcl_interfaces::msg::Parameter p3;
   p3.name = "material_box_id";
   p3.value = p3_v;
 
-  rcl_interfaces::msg::Parameter p4;
-  rcl_interfaces::msg::ParameterValue p4_v;
-  p4_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
-  p4_v.string_array_value.assign(request->print_info.begin(), request->print_info.end());
-  p4.name = "print_info";
-  p4.value = p4_v;
+  rcl_interfaces::msg::ParameterValue p_cn_name_v;
+  p_cn_name_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  p_cn_name_v.string_array_value.resize(CELLS);
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    p_cn_name_v.string_array_value[i] = request->print_info[i].cn_name;
+  }
+  rcl_interfaces::msg::Parameter p_cn_name;
+  p_cn_name.name = "cn_name";
+  p_cn_name.value = p_cn_name_v;
+
+  rcl_interfaces::msg::ParameterValue p_en_name_v;
+  p_en_name_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  p_en_name_v.string_array_value.resize(CELLS);
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    p_en_name_v.string_array_value[i] = request->print_info[i].en_name;
+  }
+  rcl_interfaces::msg::Parameter p_en_name;
+  p_en_name.name = "en_name";
+  p_en_name.value = p_en_name_v;
+
+  rcl_interfaces::msg::ParameterValue p_date_v;
+  p_date_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  p_date_v.string_array_value.resize(CELLS);
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    p_date_v.string_array_value[i] = request->print_info[i].date;
+  }
+  rcl_interfaces::msg::Parameter p_date;
+  p_date.name = "date";
+  p_date.value = p_date_v;
+
+  rcl_interfaces::msg::ParameterValue p_time_v;
+  p_time_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  p_time_v.string_array_value.resize(CELLS);
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    p_time_v.string_array_value[i] = request->print_info[i].time;
+  }
+  rcl_interfaces::msg::Parameter p_time;
+  p_time.name = "time";
+  p_time.value = p_time_v;
+
+  rcl_interfaces::msg::ParameterValue p_drugs_v;
+  p_drugs_v.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  p_drugs_v.string_array_value.resize(CELLS);
+  for (size_t i = 0; i < CELLS; i++)
+  {
+    auto join = [&](const std::vector<std::string>& vec, char delimiter) {
+      std::ostringstream oss;
+      for (size_t i = 0; i < vec.size(); ++i) 
+      {
+        oss << vec[i];
+        if (i != vec.size() - 1) 
+          oss << delimiter; // Add # delimiter except for the last element
+      }
+      return oss.str();
+    };
+    p_drugs_v.string_array_value[i] = join(request->print_info[i].drugs, '#');
+  }
+  rcl_interfaces::msg::Parameter p_drugs;
+  p_drugs.name = "drugs";
+  p_drugs.value = p_drugs_v;
 
   load_node_srv_request->parameters.push_back(p1);
   load_node_srv_request->parameters.push_back(p2);
   load_node_srv_request->parameters.push_back(p3);
-  load_node_srv_request->parameters.push_back(p4);
+  load_node_srv_request->parameters.push_back(p_cn_name);
+  load_node_srv_request->parameters.push_back(p_en_name);
+  load_node_srv_request->parameters.push_back(p_date);
+  load_node_srv_request->parameters.push_back(p_time);
+  load_node_srv_request->parameters.push_back(p_drugs);
 
   using ServiceResponseFuture = rclcpp::Client<LoadNode>::SharedFuture;
 
@@ -249,9 +311,7 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  // auto exec = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
   auto exec = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
-
   auto options = rclcpp::NodeOptions();
   auto node = std::make_shared<PackagingMachineManager>(
     exec, 

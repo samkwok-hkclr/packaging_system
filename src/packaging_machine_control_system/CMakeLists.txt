@@ -29,6 +29,7 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(composition_interfaces REQUIRED)
 find_package(canopen_interfaces REQUIRED)
+find_package(Iconv REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_search_module(LIBUSB REQUIRED libusb-1.0)
@@ -71,12 +72,21 @@ ament_target_dependencies(packaging_machine_node
   rclcpp_components
   smdps_msgs
   canopen_interfaces
+  Iconv
 )
 target_include_directories(packaging_machine_node
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
   ${LIBUSB_INCLUDE_DIRS} 
+)
+
+add_executable(packaging_order_client 
+  src/packaging_order_client.cpp
+)
+ament_target_dependencies(packaging_order_client 
+  rclcpp 
+  smdps_msgs
 )
 
 add_library(packaging_machine_action_client SHARED
@@ -100,6 +110,7 @@ rclcpp_components_register_nodes(packaging_machine_action_client "action_client:
 install(TARGETS
   packaging_machine_manager
   packaging_machine_node
+  packaging_order_client
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -35,7 +35,7 @@ void Printer::addDefaultConfig(const std::string &name, const std::string &confi
 
 void Printer::addDefaultConfig(const std::string &cmd) 
 {
-    default_cmd_.try_emplace(cmd, "");
+  default_cmd_.try_emplace(cmd, "");
 }
 
 bool Printer::updateDefaultConfig(const std::string &name, const std::string &config) 
@@ -60,4 +60,46 @@ void Printer::runTask(const std::vector<std::string> &cmds)
     // usb_->bulkTransfer(endpoint_out_, std::format("{}\r\n", command), timeout_);
     usb_->bulkTransfer(endpoint_out_, command + "\r\n", timeout_);
   }
+}
+
+std::string Printer::convert_utf8_to_gbk(const std::string &utf8_string) 
+{
+  // 设置转换
+  iconv_t cd = iconv_open("GBK", "UTF-8");
+  if (cd == (iconv_t)(-1)) {
+      perror("iconv_open failed");
+      return "";
+  }
+
+  // 准备输入和输出
+  char *in_buf = const_cast<char*>(utf8_string.c_str());
+  size_t in_bytes_left = utf8_string.size();
+  
+  // 预分配输出缓冲区，GBK 编码可能会稍大
+  size_t out_buf_size = in_bytes_left * 2; // 预留空间
+  char *out_buf = new char[out_buf_size];
+  char *out_ptr = out_buf;
+  size_t out_bytes_left = out_buf_size;
+
+  // 执行转换
+  size_t result = iconv(cd, &in_buf, &in_bytes_left, &out_ptr, &out_bytes_left);
+  
+  if (result == (size_t)(-1)) {
+    perror("iconv failed");
+    delete[] out_buf;
+    iconv_close(cd);
+    return "";
+  }
+
+  // 计算转换后的字符串长度
+  size_t converted_length = out_buf_size - out_bytes_left;
+  
+  // 生成输出字符串
+  std::string gbk_string(out_buf, converted_length);
+
+  // 清理
+  delete[] out_buf;
+  iconv_close(cd);
+
+  return gbk_string;
 }

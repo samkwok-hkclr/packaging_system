@@ -26,7 +26,7 @@ def generate_launch_description():
     master_bin_path = os.path.join(
         get_package_share_directory("packaging_machine_comm"),
         "config",
-        "maishuo_lifecycle",
+        "futian_lifecycle",
         "master.bin",
     )
     if not os.path.exists(master_bin_path):
@@ -43,14 +43,14 @@ def generate_launch_description():
             "master_config": os.path.join(
                 get_package_share_directory("packaging_machine_comm"),
                 "config",
-                "maishuo_lifecycle",
+                "futian_lifecycle",
                 "master.dcf",
             ),
             "master_bin": master_bin_path,
             "bus_config": os.path.join(
                 get_package_share_directory("packaging_machine_comm"),
                 "config",
-                "maishuo_lifecycle",
+                "futian_lifecycle",
                 "bus.yml",
             ),
             "can_interface_name": "vxcan1",

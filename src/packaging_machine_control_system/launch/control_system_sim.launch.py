@@ -35,15 +35,15 @@ def generate_launch_description():
             )
         ld.add_action(node)
 
-    # manager = Node(
-    #     package='packaging_machine_control_system',
-    #     executable='packaging_machine_manager',
-    #     name='packaging_machine_manager',
-    #     parameters=[{'packaging_machines': NUMBER_OF_PACKAGING_MACHINE}],
-    #     respawn=True,
-    #     respawn_delay=5,
-    #     output='screen',
-    # )
-    # ld.add_action(manager)
+    manager = Node(
+        package='packaging_machine_control_system',
+        executable='packaging_machine_manager',
+        name='packaging_machine_manager',
+        parameters=[{'packaging_machines': NUMBER_OF_PACKAGING_MACHINE}],
+        respawn=True,
+        respawn_delay=5,
+        output='screen',
+    )
+    ld.add_action(manager)
 
     return ld

@@ -1,0 +1,8 @@
+docker exec -it ros2_humble_dev_2 bash
+
+cd ~/packaging_system && source /opt/ros/humble/setup.bash && source install/setup.bash
+
+
+ros2 launch packaging_machine_comm futian_lifecycle_setup.launch.py
+
+ros2 launch packaging_machine_control_system control_system.launch.py
